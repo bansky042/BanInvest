@@ -36,6 +36,13 @@ export default function AuthForm({ type }: AuthFormProps) {
 
   const generateReferralCode = () => `BAN-${nanoid(6).toUpperCase()}`;
 
+  // ✅ Save referral ID from URL to localStorage
+  useEffect(() => {
+    if (referralCodeFromURL) {
+      localStorage.setItem("referralId", referralCodeFromURL);
+    }
+  }, [referralCodeFromURL]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
@@ -44,26 +51,33 @@ export default function AuthForm({ type }: AuthFormProps) {
 
     try {
       if (isSignup) {
-        // ===== SIGN UP FLOW =====
         if (!formData.email || !formData.password)
           throw new Error("Email and password are required.");
         if (formData.password !== formData.confirmPassword)
           throw new Error("Passwords do not match.");
 
         const referralCode = generateReferralCode();
+        const referredBy = localStorage.getItem("referralId");
 
-        // ✅ Step 1: Supabase Auth signup
+        // ✅ Create user in Supabase Auth
         const { data, error } = await supabase.auth.signUp({
           email: formData.email,
           password: formData.password,
           options: {
+            data: {
+              username: formData.username,
+              full_name: formData.fullName,
+              country: formData.country,
+              phone: formData.phone,
+            },
             emailRedirectTo: `${window.location.origin}/auth/callback`,
           },
         });
+
         if (error) throw error;
         if (!data?.user) throw new Error("Failed to create user.");
 
-        // ✅ Step 2: Insert user into `users` table
+        // ✅ Insert new user record into your "users" table
         const { error: insertError } = await supabase.from("users").insert([
           {
             id: data.user.id,
@@ -72,7 +86,7 @@ export default function AuthForm({ type }: AuthFormProps) {
             country: formData.country,
             phone: formData.phone,
             referral_code: referralCode,
-            referred_by: referralCodeFromURL || null,
+            referred_by: referredBy || null, // ✅ Save the referral relationship
             deposit_balance: 0,
             profit_balance: 0,
             affiliate_balance: 0,
@@ -80,9 +94,10 @@ export default function AuthForm({ type }: AuthFormProps) {
             email: formData.email,
           },
         ]);
+
         if (insertError) throw insertError;
 
-        // ✅ Step 3: Send Welcome Email
+        // ✅ Send Welcome Email
         await fetch("/api/email/signup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -93,46 +108,44 @@ export default function AuthForm({ type }: AuthFormProps) {
         });
 
         alert("✅ Account created! Please verify your email before signing in.");
-        router.push("/");
+        localStorage.removeItem("referralId"); // clear ref after signup
+        router.push("/auth/signin");
+
       } else {
-        // ✅ Step 3: Sign in
-const { data, error } = await supabase.auth.signInWithPassword({
-  email: formData.email,
-  password: formData.password,
-});
+        // ✅ Sign In Flow
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password,
+        });
+        if (error) throw error;
 
-if (error) throw error;
+        // ✅ Get IP & location (optional)
+        let ipAddress = "Unknown";
+        let location = "Unknown";
+        try {
+          const ipRes = await fetch("https://ipapi.co/json/");
+          if (ipRes.ok) {
+            const ipData = await ipRes.json();
+            ipAddress = ipData.ip || "Unknown";
+            location = `${ipData.city || "Unknown City"}, ${ipData.country_name || "Unknown Country"}`;
+          }
+        } catch (err) {
+          console.error("🌍 Failed to fetch location:", err);
+        }
 
-// ✅ Fetch IP & location data
-let ipAddress = "Unknown";
-let location = "Unknown";
+        // ✅ Send login email
+        await fetch("/api/email/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userEmail: formData.email,
+            username: formData.username || formData.fullName || "User",
+            ipAddress,
+            location,
+          }),
+        });
 
-try {
-  const ipRes = await fetch("https://ipapi.co/json/");
-  if (ipRes.ok) {
-    const ipData = await ipRes.json();
-    ipAddress = ipData.ip || "Unknown";
-    location = `${ipData.city || "Unknown City"}, ${ipData.country_name || "Unknown Country"}`;
-  }
-} catch (err) {
-  console.error("🌍 Failed to fetch location:", err);
-}
-
-// ✅ Send login notification email
-await fetch("/api/email/login", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    userEmail: formData.email,
-    username: formData.username || formData.fullName || "User",
-    ipAddress,
-    location,
-  }),
-});
-
-router.push("/dashboard");
-
-
+        router.push("/dashboard");
       }
     } catch (err: any) {
       console.error("Auth error:", err);
@@ -144,43 +157,32 @@ router.push("/dashboard");
 
   // ✅ Google OAuth
   const handleGoogleAuth = async () => {
-  setLoading(true);
-  setErrorMsg(""); // Clear previous errors
-
-  try {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: "http://localhost:3000/auth/callback", // 👈 Your frontend callback route
-        queryParams: {
-          access_type: "offline", // ensures refresh token
-          prompt: "consent", // always ask permission
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: { access_type: "offline", prompt: "consent" },
         },
-      },
-    });
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      setErrorMsg(err.message || "Google sign-in failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    if (error) throw error;
-
-    console.log("✅ Redirecting to Google...");
-  } catch (err: any) {
-    console.error("❌ Google OAuth error:", err.message);
-    setErrorMsg(err.message || "Google sign-in failed");
-  } finally {
-    setLoading(false);
-  }
-};
-
-
-
-  // ✅ Auto-redirect if user already logged in
+  // ✅ Avoid redirect loop when a signed-in user visits signup
   useEffect(() => {
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (session?.user) router.push("/dashboard");
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session && !isSignup) {
+        router.push("/dashboard");
       }
-    );
-    return () => listener.subscription.unsubscribe();
-  }, [router]);
+    });
+  }, [router, isSignup]);
 
   return (
     <div
@@ -207,9 +209,7 @@ router.push("/dashboard");
           {isSignup ? "Create Your Account" : "Welcome Back"}
         </h1>
 
-        {errorMsg && (
-          <p className="text-red-500 text-center mb-4 text-sm">{errorMsg}</p>
-        )}
+        {errorMsg && <p className="text-red-500 text-center mb-4 text-sm">{errorMsg}</p>}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {isSignup && (
@@ -220,27 +220,20 @@ router.push("/dashboard");
               <InputField label="Phone Number" name="phone" placeholder="+234 812 345 6789" theme={theme} onChange={handleChange} required />
             </>
           )}
-
           <InputField label="Email" name="email" type="email" theme={theme} onChange={handleChange} required />
           <InputField label="Password" name="password" type="password" theme={theme} onChange={handleChange} required />
-          {isSignup && (
-            <InputField label="Confirm Password" name="confirmPassword" type="password" theme={theme} onChange={handleChange} required />
-          )}
+          {isSignup && <InputField label="Confirm Password" name="confirmPassword" type="password" theme={theme} onChange={handleChange} required />}
 
           <button
             type="submit"
             disabled={loading}
-            className={`w-full py-3 rounded-lg font-semibold shadow-lg transition-transform transform hover:scale-105 ${
+            className={`w-full py-3 rounded-lg font-semibold shadow-lg transition-transform hover:scale-105 ${
               theme === "dark"
                 ? "bg-gradient-to-r from-purple-600 to-teal-400 text-white"
                 : "bg-gradient-to-r from-purple-500 to-teal-500 text-white"
             }`}
           >
-            {loading
-              ? "Please wait..."
-              : isSignup
-              ? "Create Account"
-              : "Sign In"}
+            {loading ? "Please wait..." : isSignup ? "Create Account" : "Sign In"}
           </button>
         </form>
 

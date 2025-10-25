@@ -6,18 +6,19 @@ import { Copy, CheckCircle, Users, DollarSign } from "lucide-react";
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import { supabase } from "@/lib/createclient";
-import { useRouter } from "next/navigation"; // ✅ Correct import
+import { useRouter } from "next/navigation";
 
 export default function AffiliatePage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
+
   const [copied, setCopied] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [referralLink, setReferralLink] = useState("");
   const [referrals, setReferrals] = useState(0);
   const [earnings, setEarnings] = useState(0);
 
-  const router = useRouter(); // ✅ Initialize router properly
+  const router = useRouter();
 
   useEffect(() => {
     const fetchUserAndStats = async () => {
@@ -25,32 +26,52 @@ export default function AffiliatePage() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (user) {
-        setUser(user);
-        const username = user.user_metadata?.username || user.id;
-        setReferralLink(`https://baninvest.com/register?ref=${username}`);
-
-        // Fetch referral stats
-        const { data: referralData, error: refErr } = await supabase
-          .from("referrals")
-          .select("*")
-          .eq("referrer_id", user.id);
-
-        if (!refErr && referralData) {
-          setReferrals(referralData.length);
-          const total = referralData.reduce(
-            (sum, r) => sum + (r.reward_amount || 0),
-            0
-          );
-          setEarnings(total);
-        }
-      } else {
-        router.push("/auth/signin"); // ✅ Redirect only when user not found
+      if (!user) {
+        router.push("/auth/signin");
+        return;
       }
+
+      setUser(user);
+
+      // ✅ Generate referral link dynamically based on current domain
+      const username = user.user_metadata?.username || user.id;
+      const currentDomain =
+        typeof window !== "undefined"
+          ? window.location.origin
+          : "https://baninvest.com";
+      setReferralLink(`${currentDomain}/auth/signup?ref=${username}`);
+
+      // ✅ Fetch user data from the users table (to get referral_balance)
+      const { data: userRecord, error: userError } = await supabase
+        .from("users")
+        .select("id, referral_balance")
+        .eq("id", user.id)
+        .single();
+
+      if (userError) {
+        console.error("❌ Error fetching user referral balance:", userError);
+        return;
+      }
+
+      // ✅ Set referral earnings directly from user record
+      setEarnings(userRecord?.referral_balance || 0);
+
+      // ✅ Count all referred users
+      const { data: referredUsers, error: refError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("referred_by", user.id);
+
+      if (refError) {
+        console.error("❌ Error fetching referred users:", refError);
+        return;
+      }
+
+      setReferrals(referredUsers?.length || 0);
     };
 
     fetchUserAndStats();
-  }, [router]); // ✅ Remove 'user' dependency to avoid premature redirect
+  }, [router]);
 
   const handleCopy = () => {
     if (!referralLink) return;
@@ -67,7 +88,6 @@ export default function AffiliatePage() {
     >
       <Sidebar />
 
-      {/* Main Content */}
       <main className="flex-1 flex flex-col items-center justify-center p-6 md:p-10">
         <motion.div
           initial={{ opacity: 0, y: 15 }}
@@ -134,8 +154,10 @@ export default function AffiliatePage() {
                   }`}
                 >
                   <DollarSign size={28} className="text-yellow-400 mb-2" />
-                  <p className="text-lg font-bold">${earnings.toFixed(2)}</p>
-                  <p className="text-sm text-gray-400">Total Earnings</p>
+                  <p className="text-lg font-bold">
+                    ${Number(earnings).toFixed(2)}
+                  </p>
+                  <p className="text-sm text-gray-400">Referral Balance</p>
                 </motion.div>
               </div>
 

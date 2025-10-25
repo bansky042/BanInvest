@@ -48,13 +48,43 @@ export default function DashboardPage() {
         setUser(currentUser);
 
         // 🧾 Fetch user info
-        const { data: userData, error: userError } = await supabase
-          .from("users")
-          .select("username, deposit_balance, profit_balance, referral_balance")
-          .eq("id", currentUser.id)
-          .single();
+       // 🧾 Fetch user info
+const { data: userData, error: userError } = await supabase
+  .from("users")
+  .select("username, deposit_balance, profit_balance, referral_balance")
+  .eq("id", currentUser.id)
+  .single();
 
-        if (userError) throw userError;
+if (userError) throw userError;
+
+// 🧠 Calculate referrals and affiliate earnings
+const { data: referredUsers, error: refErr } = await supabase
+  .from("users")
+  .select("id")
+  .eq("referred_by", currentUser.id);
+
+if (refErr) throw refErr;
+
+const referralCount = referredUsers?.length || 0;
+const rewardPerReferral = 10; // 💰 change this to whatever reward you want
+const newReferralBalance = referralCount * rewardPerReferral;
+
+// 🧩 If affiliate balance changed, update Supabase
+if (userData.referral_balance !== newReferralBalance) {
+  await supabase
+    .from("users")
+    .update({ referral_balance: newReferralBalance })
+    .eq("id", currentUser.id);
+}
+
+// ✅ Update local state
+setUsername(userData?.username || "Investor");
+setBalances({
+  deposit_balance: userData?.deposit_balance || 0,
+  profit_balance: userData?.profit_balance || 0,
+  referral_balance: newReferralBalance,
+});
+
 
         setUsername(userData?.username || "Investor");
         setBalances({
