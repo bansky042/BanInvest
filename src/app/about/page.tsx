@@ -91,15 +91,17 @@ export default function AboutPage() {
             whileInView={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <img
-              src="/about-illustration.svg"
-              alt="Crypto Growth"
-              className={`rounded-2xl shadow-lg border ${
-                isDark
-                  ? "border-purple-800/30"
-                  : "border-purple-300/40"
+           <video
+              src="/bitcoin.mp4"
+              autoPlay
+              loop
+              muted
+              playsInline
+              className={`rounded-2xl shadow-lg border w-full h-auto ${
+                isDark ? "border-purple-800/30" : "border-purple-300/40"
               }`}
             />
+
           </motion.div>
         </div>
 

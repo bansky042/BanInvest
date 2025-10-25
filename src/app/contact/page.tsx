@@ -61,7 +61,7 @@ export default function ContactPage() {
                     isDark ? "text-purple-400" : "text-purple-600"
                   }`}
                 />
-                <span>support@baninvest.com</span>
+                <span>banInvest@gmail.com</span>
               </div>
               <div className="flex items-center gap-3">
                 <Phone
@@ -69,7 +69,7 @@ export default function ContactPage() {
                     isDark ? "text-purple-400" : "text-purple-600"
                   }`}
                 />
-                <span>+234 812 345 6789</span>
+                <span>+234 916 461 2096</span>
               </div>
               <div className="flex items-center gap-3">
                 <MapPin
