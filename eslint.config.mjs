@@ -1,66 +1,43 @@
-import eslint from "@eslint/js";
-import tseslint from "typescript-eslint";
+import tseslint from "@typescript-eslint/eslint-plugin";
+import tsParser from "@typescript-eslint/parser";
 import reactPlugin from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
 import nextPlugin from "@next/eslint-plugin-next";
-import globals from "globals";
 
-export default tseslint.config(
-  // Base JS config
-  eslint.configs.recommended,
-  // TypeScript recommended config
-  ...tseslint.configs.recommended,
-  // React recommended config
-  reactPlugin.configs.recommended,
+export default [
   {
-    files: ["**/*.{ts,tsx}"],
-    ignores: [
-      "node_modules/**",
-      ".next/**",
-      "dist/**",
-      "build/**",
-      "out/**",
-    ],
+    files: ["**/*.{js,jsx,ts,tsx}"],
+    ignores: ["node_modules", ".next", "dist"],
+
     languageOptions: {
-      globals: globals.browser,
-      parser: tseslint.parser,
+      parser: tsParser,
       parserOptions: {
         project: "./tsconfig.json",
-        tsconfigRootDir: process.cwd(),
+        ecmaVersion: 2020,
+        sourceType: "module",
+        ecmaFeatures: { jsx: true },
       },
     },
+
     plugins: {
-      "@typescript-eslint": tseslint.plugin,
+      "@typescript-eslint": tseslint,
       react: reactPlugin,
       "react-hooks": reactHooks,
-      "@next/next": nextPlugin,
+      next: nextPlugin,
     },
+
     rules: {
-      /* --- General Clean Code Rules --- */
-      "no-unused-vars": "off", // handled by TS
-      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
-      "no-console": ["warn", { allow: ["warn", "error", "info"] }],
-
-      /* --- TypeScript Rules --- */
-      "@typescript-eslint/no-explicit-any": "off", // ✅ disables your error
-      "@typescript-eslint/ban-ts-comment": "off",
-      "@typescript-eslint/no-non-null-assertion": "off",
-      "@typescript-eslint/explicit-module-boundary-types": "off",
-
-      /* --- React Rules --- */
-      "react/react-in-jsx-scope": "off", // Next.js handles this
-      "react/prop-types": "off", // not needed for TS
+      "no-unused-vars": "warn",
+      "@typescript-eslint/no-unused-vars": ["warn"],
+      "@typescript-eslint/no-explicit-any": "off", // optional
+      "react/react-in-jsx-scope": "off",
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "warn",
+      "next/no-html-link-for-pages": "off",
+    },
 
-      /* --- Next.js Rules --- */
-      "@next/next/no-html-link-for-pages": "off",
-      "@next/next/no-img-element": "off",
-    },
     settings: {
-      react: {
-        version: "detect",
-      },
+      react: { version: "detect" },
     },
-  }
-);
+  },
+];
