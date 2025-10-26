@@ -3,19 +3,29 @@
 import { motion } from "framer-motion";
 import React from "react";
 import { useTheme } from "@/context/ThemeContext";
+import type { User } from "@supabase/supabase-js";
 
 interface HeroProps {
-  user?: { name?: string };
+  user?: User | null;
 }
 
 const Hero: React.FC<HeroProps> = ({ user }) => {
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
+  // Extract name from Supabase user metadata or fallback
+  const displayName =
+    user?.user_metadata?.name ||
+    user?.user_metadata?.full_name ||
+    user?.email?.split("@")[0] ||
+    "Investor";
+
   return (
     <section
       className={`relative flex flex-col items-center justify-center text-center overflow-hidden py-28 px-6 md:px-16 transition-colors duration-500 ${
-        isDark ? "bg-[#080010] text-gray-100" : "bg-gradient-to-b from-white to-gray-50 text-gray-900"
+        isDark
+          ? "bg-[#080010] text-gray-100"
+          : "bg-gradient-to-b from-white to-gray-50 text-gray-900"
       }`}
     >
       {/* Soft gradient overlay */}
@@ -34,7 +44,7 @@ const Hero: React.FC<HeroProps> = ({ user }) => {
         transition={{ duration: 0.8 }}
         className="text-5xl md:text-7xl font-extrabold leading-tight mb-6 relative z-10"
       >
-        Grow Your Crypto{" "}
+        Welcome Back,{" "}
         <span
           className={`text-transparent bg-clip-text ${
             isDark
@@ -42,7 +52,7 @@ const Hero: React.FC<HeroProps> = ({ user }) => {
               : "bg-gradient-to-r from-purple-600 via-teal-500 to-purple-600"
           }`}
         >
-          Smarter
+          {displayName}
         </span>
       </motion.h1>
 

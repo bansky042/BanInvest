@@ -5,20 +5,34 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/createclient";
 import { toast } from "sonner";
 
+
+interface UserProfileForm {
+  username: string;
+  phone: string;
+  country: string;
+}
+
+interface SupabaseUser {
+  id: string;
+  email?: string | null;
+}
+
+
 export default function CompleteProfile() {
-  const [user, setUser] = useState<any>(null);
-  const [form, setForm] = useState({
-    username: "",
-    phone: "",
-    country: "",
-  });
+  const [user, setUser] = useState<SupabaseUser | null>(null);
+const [form, setForm] = useState<UserProfileForm>({
+  username: "",
+  phone: "",
+  country: "",
+});
+
   const router = useRouter();
 
   // ✅ Get current user
   useEffect(() => {
     const getUser = async () => {
       const { data } = await supabase.auth.getUser();
-      setUser(data?.user);
+      setUser(data?.user as SupabaseUser | null);
     };
     getUser();
   }, []);

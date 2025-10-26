@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, JSX } from "react";
 import Link from "next/link";
 import {
   ArrowDownCircle,
@@ -21,17 +21,32 @@ import { supabase } from "@/lib/createclient";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+// ✅ Types
+import type { User } from "@supabase/supabase-js";
+
+interface UserProfile {
+  username?: string;
+  full_name?: string;
+  profile_image?: string;
+}
+
+interface NavLink {
+  label: string;
+  icon: JSX.Element;
+  href: string;
+}
+
 export default function Sidebar() {
   const router = useRouter();
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<any>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
 
   // 🔹 Navigation Links
-  const navLinks = [
+  const navLinks: NavLink[] = [
     { label: "Dashboard", icon: <BarChart3 />, href: "/dashboard" },
     { label: "Deposit", icon: <ArrowDownCircle />, href: "/dashboard/deposit" },
     { label: "Withdraw", icon: <ArrowUpCircle />, href: "/dashboard/withdraw" },
@@ -63,12 +78,12 @@ export default function Sidebar() {
           .from("users")
           .select("username, full_name, profile_image")
           .eq("id", currentUser.id)
-          .single();
+          .single<UserProfile>();
 
         if (profileError) throw profileError;
         setProfile(userProfile);
-      } catch (err: any) {
-        console.error("❌ Sidebar profile fetch error:", err.message || err);
+      } catch (err) {
+        console.error("❌ Sidebar profile fetch error:", err);
         toast.error("Failed to load user profile");
       }
     };
@@ -83,9 +98,9 @@ export default function Sidebar() {
       if (error) throw error;
 
       toast.success("Logged out successfully!");
-      router.push("/"); // redirect to login page
-    } catch (err: any) {
-      console.error("❌ Logout error:", err.message || err);
+      router.push("/");
+    } catch (err) {
+      console.error("❌ Logout error:", err);
       toast.error("Failed to log out");
     }
   };
@@ -133,9 +148,9 @@ export default function Sidebar() {
 
         {/* Navigation Links */}
         <nav className="flex flex-col gap-3 mt-4">
-          {navLinks.map((item, i) => (
+          {navLinks.map((item) => (
             <Link
-              key={i}
+              key={item.href}
               href={item.href}
               onClick={() => setIsSidebarOpen(false)}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg font-medium transition-all ${

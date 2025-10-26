@@ -5,21 +5,55 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/createclient";
 import { motion } from "framer-motion";
 import { useTheme } from "../../../context/ThemeContext";
-import { Sun, Moon, User, Database, ArrowRight, Wallet, TrendingUp } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import {
+  User,
+  Database,
+  ArrowRight,
+  Wallet,
+  TrendingUp,
+} from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
+
+// ✅ Define proper types
+interface AdminProfile {
+  username: string;
+  role: "admin" | "user";
+}
+
+interface Metrics {
+  totalDeposits: number;
+  totalWithdrawals: number;
+  totalUsers: number;
+  totalInvestments: number;
+}
+
+interface ChartData {
+  hour: string;
+  deposits: number;
+  withdrawals: number;
+  investments: number;
+}
 
 export default function AdminDashboard() {
   const router = useRouter();
   const { theme } = useTheme();
-  const [admin, setAdmin] = useState<any>(null);
+  const [admin, setAdmin] = useState<AdminProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [metrics, setMetrics] = useState({
+  const [metrics, setMetrics] = useState<Metrics>({
     totalDeposits: 0,
     totalWithdrawals: 0,
     totalUsers: 0,
     totalInvestments: 0,
   });
-  const [chartData, setChartData] = useState<any[]>([]);
+  const [chartData, setChartData] = useState<ChartData[]>([]);
 
   useEffect(() => {
     const loadAdminDashboard = async () => {
@@ -41,9 +75,9 @@ export default function AdminDashboard() {
           return;
         }
 
-        setAdmin(profile);
+        setAdmin(profile as AdminProfile);
 
-        // Load metrics
+        // ✅ Load metrics
         const [
           { count: deposits },
           { count: withdrawals },
@@ -63,14 +97,14 @@ export default function AdminDashboard() {
           totalInvestments: investments || 0,
         });
 
-        // Prepare hourly transaction chart data
+        // ✅ Prepare chart data
         const [depositData, withdrawData, investmentData] = await Promise.all([
           supabase.from("deposits").select("created_at"),
           supabase.from("withdrawals").select("created_at"),
           supabase.from("investments").select("created_at"),
         ]);
 
-        const groupByHour = (records: any[]) => {
+        const groupByHour = (records: { created_at: string }[]) => {
           const result: Record<string, number> = {};
           records.forEach((r) => {
             const hour = new Date(r.created_at).getHours();
@@ -83,7 +117,7 @@ export default function AdminDashboard() {
         const wit = groupByHour(withdrawData.data || []);
         const inv = groupByHour(investmentData.data || []);
 
-        const merged = Array.from({ length: 24 }, (_, hour) => ({
+        const merged: ChartData[] = Array.from({ length: 24 }, (_, hour) => ({
           hour: `${hour}:00`,
           deposits: dep[hour] || 0,
           withdrawals: wit[hour] || 0,
@@ -104,14 +138,26 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className={`flex justify-center items-center h-screen ${theme === "dark" ? "bg-gray-900 text-gray-300" : "bg-gray-50 text-gray-600"}`}>
+      <div
+        className={`flex justify-center items-center h-screen ${
+          theme === "dark"
+            ? "bg-gray-900 text-gray-300"
+            : "bg-gray-50 text-gray-600"
+        }`}
+      >
         <p>Loading admin dashboard...</p>
       </div>
     );
   }
 
   return (
-    <div className={`min-h-screen transition-colors ${theme === "dark" ? "bg-gray-900 text-gray-100" : "bg-gray-50 text-gray-800"} flex flex-col items-center py-10 px-4`}>
+    <div
+      className={`min-h-screen transition-colors ${
+        theme === "dark"
+          ? "bg-gray-900 text-gray-100"
+          : "bg-gray-50 text-gray-800"
+      } flex flex-col items-center py-10 px-4`}
+    >
       {/* Header */}
       <div className="w-full max-w-6xl flex justify-between items-center mb-10">
         <div>
@@ -171,36 +217,53 @@ export default function AdminDashboard() {
       </div>
 
       {/* Chart */}
-      <div className={`w-full max-w-6xl p-6 rounded-2xl shadow-lg ${theme === "dark" ? "bg-gray-800" : "bg-white"}`}>
-        <h2 className="text-xl font-semibold mb-4">Hourly Transaction Overview</h2>
+      <div
+        className={`w-full max-w-6xl p-6 rounded-2xl shadow-lg ${
+          theme === "dark" ? "bg-gray-800" : "bg-white"
+        }`}
+      >
+        <h2 className="text-xl font-semibold mb-4">
+          Hourly Transaction Overview
+        </h2>
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={chartData}>
             <XAxis dataKey="hour" />
             <YAxis />
-          <Tooltip
-  contentStyle={{
-    backgroundColor: theme === "dark" ? "#1F2937" : "#FFFFFF", // dark: gray-800
-    color: theme === "dark" ? "#F9FAFB" : "#111827", // dark: gray-50, light: gray-900
-    borderRadius: "0.75rem",
-    border: "none",
-    boxShadow:
-      theme === "dark"
-        ? "0 4px 12px rgba(0, 0, 0, 0.5)"
-        : "0 4px 12px rgba(0, 0, 0, 0.1)",
-  }}
-  labelStyle={{
-    color: theme === "dark" ? "#93C5FD" : "#2563EB", // light blue label for hour
-    fontWeight: 600,
-  }}
-  itemStyle={{
-    padding: "4px 0",
-  }}
-/>
-
+            <Tooltip
+              contentStyle={{
+                backgroundColor: theme === "dark" ? "#1F2937" : "#FFFFFF",
+                color: theme === "dark" ? "#F9FAFB" : "#111827",
+                borderRadius: "0.75rem",
+                border: "none",
+                boxShadow:
+                  theme === "dark"
+                    ? "0 4px 12px rgba(0, 0, 0, 0.5)"
+                    : "0 4px 12px rgba(0, 0, 0, 0.1)",
+              }}
+              labelStyle={{
+                color: theme === "dark" ? "#93C5FD" : "#2563EB",
+                fontWeight: 600,
+              }}
+            />
             <Legend />
-            <Line type="monotone" dataKey="deposits" stroke="#10B981" name="Deposits" />
-            <Line type="monotone" dataKey="withdrawals" stroke="#F59E0B" name="Withdrawals" />
-            <Line type="monotone" dataKey="investments" stroke="#8B5CF6" name="Investments" />
+            <Line
+              type="monotone"
+              dataKey="deposits"
+              stroke="#10B981"
+              name="Deposits"
+            />
+            <Line
+              type="monotone"
+              dataKey="withdrawals"
+              stroke="#F59E0B"
+              name="Withdrawals"
+            />
+            <Line
+              type="monotone"
+              dataKey="investments"
+              stroke="#8B5CF6"
+              name="Investments"
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -215,14 +278,16 @@ export default function AdminDashboard() {
           onClick={() => router.push("/admin/deposit")}
           className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md transition"
         >
-          <Database className="w-5 h-5" /> View Deposit List <ArrowRight className="w-4 h-4" />
+          <Database className="w-5 h-5" /> View Deposit List{" "}
+          <ArrowRight className="w-4 h-4" />
         </button>
 
         <button
           onClick={() => router.push("/admin/withdrawal")}
           className="flex items-center justify-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-md transition"
         >
-          <Wallet className="w-5 h-5" /> View Withdrawal List <ArrowRight className="w-4 h-4" />
+          <Wallet className="w-5 h-5" /> View Withdrawal List{" "}
+          <ArrowRight className="w-4 h-4" />
         </button>
       </motion.div>
     </div>

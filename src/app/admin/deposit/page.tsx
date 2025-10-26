@@ -6,14 +6,34 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTheme } from "../../../context/ThemeContext";
 import { Button } from "../../ui/button";
-import { Sun, Moon } from "lucide-react";
+
+// Define deposit structure
+interface Deposit {
+  id: string;
+  user_id: string;
+  username?: string;
+  coin_type?: string;
+  amount: number;
+  status: "pending" | "approved" | "rejected";
+  payment_proof?: string;
+  created_at: string;
+}
+
+// Define user structure
+interface UserRecord {
+  id: string;
+  username?: string;
+  email?: string;
+  deposit_balance: number;
+  role: string;
+}
 
 export default function AdminDepositsPage() {
-  const [deposits, setDeposits] = useState<any[]>([]);
+  const [deposits, setDeposits] = useState<Deposit[]>([]);
   const [loading, setLoading] = useState(false);
   const [checkingAdmin, setCheckingAdmin] = useState(true);
   const router = useRouter();
-  const { theme} = useTheme();
+  const { theme } = useTheme();
 
   // ✅ Protect route - only allow admins
   useEffect(() => {
@@ -66,7 +86,7 @@ export default function AdminDepositsPage() {
         console.error(error);
         toast.error("Failed to load deposits");
       } else {
-        setDeposits(data || []);
+        setDeposits((data as Deposit[]) || []);
       }
       setLoading(false);
     };
@@ -75,18 +95,18 @@ export default function AdminDepositsPage() {
   }, [checkingAdmin]);
 
   // ✅ Approve deposit
-  const handleApprove = async (deposit: any) => {
+  const handleApprove = async (deposit: Deposit) => {
     try {
       const { data: user, error: userError } = await supabase
         .from("users")
         .select("deposit_balance, username, email")
         .eq("id", deposit.user_id)
-        .single();
+        .single<UserRecord>();
 
-      if (userError) throw userError;
+      if (userError || !user) throw userError;
 
       const newBalance =
-        (user.deposit_balance || 0) + parseFloat(deposit.amount);
+        (user.deposit_balance || 0) + parseFloat(String(deposit.amount));
 
       const { error: updateBalanceError } = await supabase
         .from("users")
@@ -121,14 +141,14 @@ export default function AdminDepositsPage() {
       );
 
       toast.success(`✅ Approved deposit for ${user.username}`);
-    } catch (error: any) {
+    } catch (error) {
       console.error("Approve deposit error:", error);
       toast.error("Failed to approve deposit");
     }
   };
 
   // ✅ Reject deposit
-  const handleReject = async (deposit: any) => {
+  const handleReject = async (deposit: Deposit) => {
     try {
       const { error: rejectError } = await supabase
         .from("deposits")
@@ -141,9 +161,9 @@ export default function AdminDepositsPage() {
         .from("users")
         .select("username, email")
         .eq("id", deposit.user_id)
-        .single();
+        .single<UserRecord>();
 
-      if (userError) throw userError;
+      if (userError || !user) throw userError;
 
       await fetch("/api/admin-transaction", {
         method: "POST",
@@ -165,7 +185,7 @@ export default function AdminDepositsPage() {
       );
 
       toast.error(`🚫 Deposit rejected for ${user.username}`);
-    } catch (error: any) {
+    } catch (error) {
       console.error("Reject deposit error:", error);
       toast.error("Failed to reject deposit");
     }
@@ -181,14 +201,13 @@ export default function AdminDepositsPage() {
   return (
     <main
       className={`min-h-screen transition-colors duration-300 ${
-        theme === "dark" ? "bg-[#0A0018] text-gray-100" : "bg-gray-50 text-gray-900"
+        theme === "dark"
+          ? "bg-[#0A0018] text-gray-100"
+          : "bg-gray-50 text-gray-900"
       } p-10`}
     >
-      {/* Header */}
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">💰 Deposit Management</h1>
-
-        
       </div>
 
       {loading ? (

@@ -7,16 +7,17 @@ import { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import { supabase } from "@/lib/createclient";
 import { useRouter } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
 
 export default function AffiliatePage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
   const [copied, setCopied] = useState(false);
-  const [user, setUser] = useState<any>(null);
-  const [referralLink, setReferralLink] = useState("");
-  const [referrals, setReferrals] = useState(0);
-  const [earnings, setEarnings] = useState(0);
+  const [user, setUser] = useState<User | null>(null);
+  const [referralLink, setReferralLink] = useState<string>("");
+  const [referrals, setReferrals] = useState<number>(0);
+  const [earnings, setEarnings] = useState<number>(0);
 
   const router = useRouter();
 
@@ -24,7 +25,13 @@ export default function AffiliatePage() {
     const fetchUserAndStats = async () => {
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.error("❌ Error fetching auth user:", userError.message);
+        return;
+      }
 
       if (!user) {
         router.push("/auth/signin");
@@ -34,29 +41,29 @@ export default function AffiliatePage() {
       setUser(user);
 
       // ✅ Generate referral link dynamically based on current domain
-      const username = user.user_metadata?.username || user.id;
+      const username =
+        (user.user_metadata?.username as string | undefined) || user.id;
       const currentDomain =
         typeof window !== "undefined"
           ? window.location.origin
           : "https://baninvest.com";
       setReferralLink(`${currentDomain}/auth/signup?ref=${username}`);
 
-      // ✅ Fetch user data from the users table (to get referral_balance)
-      const { data: userRecord, error: userError } = await supabase
+      // ✅ Fetch referral balance from users table
+      const { data: userRecord, error: profileError } = await supabase
         .from("users")
         .select("id, referral_balance")
         .eq("id", user.id)
         .single();
 
-      if (userError) {
-        console.error("❌ Error fetching user referral balance:", userError);
+      if (profileError) {
+        console.error("❌ Error fetching user referral balance:", profileError);
         return;
       }
 
-      // ✅ Set referral earnings directly from user record
-      setEarnings(userRecord?.referral_balance || 0);
+      setEarnings(Number(userRecord?.referral_balance) || 0);
 
-      // ✅ Count all referred users
+      // ✅ Fetch referred users count
       const { data: referredUsers, error: refError } = await supabase
         .from("users")
         .select("id")
@@ -73,7 +80,7 @@ export default function AffiliatePage() {
     fetchUserAndStats();
   }, [router]);
 
-  const handleCopy = () => {
+  const handleCopy = (): void => {
     if (!referralLink) return;
     navigator.clipboard.writeText(referralLink);
     setCopied(true);
@@ -155,7 +162,7 @@ export default function AffiliatePage() {
                 >
                   <DollarSign size={28} className="text-yellow-400 mb-2" />
                   <p className="text-lg font-bold">
-                    ${Number(earnings).toFixed(2)}
+                    ${earnings.toFixed(2)}
                   </p>
                   <p className="text-sm text-gray-400">Referral Balance</p>
                 </motion.div>

@@ -11,6 +11,21 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import OngoingInvestments from "@/components/OngoingInvestments";
 
+// 🧩 Types
+interface Balances {
+  deposit_balance: number;
+  profit_balance: number;
+  referral_balance: number;
+}
+
+interface Transaction {
+  id: string;
+  amount: number;
+  status: string;
+  created_at: string;
+  type: "Deposit" | "Withdrawal";
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const { theme } = useTheme();
@@ -19,12 +34,12 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [username, setUsername] = useState("Investor");
-  const [balances, setBalances] = useState({
+  const [balances, setBalances] = useState<Balances>({
     deposit_balance: 0,
     profit_balance: 0,
     referral_balance: 0,
   });
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
 
   // ✅ Fetch dashboard data + user
   useEffect(() => {
@@ -48,49 +63,43 @@ export default function DashboardPage() {
         setUser(currentUser);
 
         // 🧾 Fetch user info
-       // 🧾 Fetch user info
-const { data: userData, error: userError } = await supabase
-  .from("users")
-  .select("username, deposit_balance, profit_balance, referral_balance")
-  .eq("id", currentUser.id)
-  .single();
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select(
+            "username, deposit_balance, profit_balance, referral_balance, referred_by"
+          )
+          .eq("id", currentUser.id)
+          .single();
 
-if (userError) throw userError;
+        if (userError) throw userError;
 
-// 🧠 Calculate referrals and affiliate earnings
-const { data: referredUsers, error: refErr } = await supabase
-  .from("users")
-  .select("id")
-  .eq("referred_by", currentUser.id);
+        // 💰 Calculate referrals and affiliate earnings
+        const { data: referredUsers, error: refErr } = await supabase
+          .from("users")
+          .select("id")
+          .eq("referred_by", currentUser.id);
 
-if (refErr) throw refErr;
+        if (refErr) throw refErr;
 
-const referralCount = referredUsers?.length || 0;
-const rewardPerReferral = 10; // 💰 change this to whatever reward you want
-const newReferralBalance = referralCount * rewardPerReferral;
+        const referralCount = referredUsers?.length || 0;
+        const rewardPerReferral = 10; // 💰 Change this as needed
+        const newReferralBalance = referralCount * rewardPerReferral;
 
-// 🧩 If affiliate balance changed, update Supabase
-if (userData.referral_balance !== newReferralBalance) {
-  await supabase
-    .from("users")
-    .update({ referral_balance: newReferralBalance })
-    .eq("id", currentUser.id);
-}
+        // 🧩 Update referral balance only if changed
+        if (userData.referral_balance !== newReferralBalance) {
+          const { error: updateErr } = await supabase
+            .from("users")
+            .update({ referral_balance: newReferralBalance })
+            .eq("id", currentUser.id);
+          if (updateErr) throw updateErr;
+        }
 
-// ✅ Update local state
-setUsername(userData?.username || "Investor");
-setBalances({
-  deposit_balance: userData?.deposit_balance || 0,
-  profit_balance: userData?.profit_balance || 0,
-  referral_balance: newReferralBalance,
-});
-
-
+        // ✅ Update state
         setUsername(userData?.username || "Investor");
         setBalances({
           deposit_balance: userData?.deposit_balance || 0,
           profit_balance: userData?.profit_balance || 0,
-          referral_balance: userData?.referral_balance || 0,
+          referral_balance: newReferralBalance,
         });
 
         // 💳 Fetch deposits
@@ -109,21 +118,36 @@ setBalances({
 
         if (witErr) throw witErr;
 
-        // Combine
-        const combined = [
-          ...(deposits?.map((d) => ({ ...d, type: "Deposit" })) || []),
-          ...(withdrawals?.map((w) => ({ ...w, type: "Withdrawal" })) || []),
-        ]
-          .sort(
-            (a, b) =>
-              new Date(b.created_at).getTime() -
-              new Date(a.created_at).getTime()
-          )
-          .slice(0, 5);
-
-        setTransactions(combined);
-      } catch (err) {
-        console.error("❌ Error fetching dashboard data:", err);
+        // 📊 Combine transactions
+                const depositTxs: Transaction[] =
+                  (deposits?.map((d: any) => ({
+                    id: d.id,
+                    amount: d.amount,
+                    status: d.status,
+                    created_at: d.created_at,
+                    type: "Deposit" as const,
+                  })) as Transaction[]) || [];
+        
+                const withdrawalTxs: Transaction[] =
+                  (withdrawals?.map((w: any) => ({
+                    id: w.id,
+                    amount: w.amount,
+                    status: w.status,
+                    created_at: w.created_at,
+                    type: "Withdrawal" as const,
+                  })) as Transaction[]) || [];
+        
+                const combined = [...depositTxs, ...withdrawalTxs]
+                  .sort(
+                    (a, b) =>
+                      new Date(b.created_at).getTime() -
+                      new Date(a.created_at).getTime()
+                  )
+                  .slice(0, 5);
+        
+                setTransactions(combined);
+      } catch (err: any) {
+        console.error("❌ Error fetching dashboard data:", err.message);
         toast.error("Failed to load dashboard data.");
       } finally {
         setLoading(false);
@@ -133,7 +157,7 @@ setBalances({
     fetchDashboardData();
   }, [router]);
 
-  // ✅ Handle redirect if not logged in (MUST be before any return)
+  // 🚪 Redirect if not logged in
   useEffect(() => {
     if (!loading && !user) {
       router.push("/auth/signin");
@@ -170,11 +194,11 @@ setBalances({
         isDark ? "bg-[#0A0018] text-gray-100" : "bg-gray-50 text-gray-900"
       }`}
     >
-      {/* Sidebar collapses on mobile */}
+      {/* 🧭 Sidebar */}
       <Sidebar />
 
       <main className="flex-1 p-4 sm:p-6 md:p-10 space-y-10">
-        {/* Header */}
+        {/* 🏁 Header */}
         <motion.div
           initial={{ opacity: 0, y: -15 }}
           animate={{ opacity: 1, y: 0 }}

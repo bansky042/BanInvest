@@ -7,9 +7,19 @@ import {
   withdrawalRejectedTemplate,
 } from "@/lib/emailTemplates";
 
+// Define type for the expected request body
+interface TransactionEmailRequest {
+  type: "deposit" | "withdrawal";
+  status: "approved" | "rejected";
+  username: string;
+  userEmail: string;
+  amount: number;
+  reason?: string;
+}
+
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const body = (await req.json()) as TransactionEmailRequest;
     const { type, status, username, userEmail, amount, reason } = body;
 
     // ✅ Validate required fields
@@ -28,22 +38,22 @@ export async function POST(req: Request) {
     switch (`${type}_${status}`) {
       case "deposit_approved":
         subject = "✅ Deposit Approved - BanMarket";
-        html = depositApprovedTemplate(username, amount);
+        html = depositApprovedTemplate(username, String(amount));
         break;
 
       case "deposit_rejected":
         subject = "❌ Deposit Rejected - BanMarket";
-        html = depositRejectedTemplate(username, amount, reason || "No reason provided");
+        html = depositRejectedTemplate(username, String(amount), reason ?? "No reason provided");
         break;
 
       case "withdrawal_approved":
         subject = "💸 Withdrawal Approved - BanMarket";
-        html = withdrawalApprovedTemplate(username, amount);
+        html = withdrawalApprovedTemplate(username, String(amount));
         break;
 
       case "withdrawal_rejected":
         subject = "🚫 Withdrawal Rejected - BanMarket";
-        html = withdrawalRejectedTemplate(username, amount, reason || "No reason provided");
+        html = withdrawalRejectedTemplate(username, String(amount), reason ?? "No reason provided");
         break;
 
       default:
@@ -68,11 +78,12 @@ export async function POST(req: Request) {
 
     console.log("✅ Email sent successfully to:", userEmail);
     return NextResponse.json({ success: true, message: "Email sent successfully" });
-  } catch (error: any) {
-    console.error("❌ Email sending error:", error);
-    return NextResponse.json(
-      { error: error.message || "Failed to send transaction email" },
-      { status: 500 }
-    );
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to send transaction email.";
+    console.error("❌ Email sending error:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

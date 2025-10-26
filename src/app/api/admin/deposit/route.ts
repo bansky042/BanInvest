@@ -7,6 +7,24 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY! // DO NOT expose this to the client
 );
 
+// Define type for the nested user relation
+interface UserInfo {
+  username: string | null;
+  email: string | null;
+}
+
+// Define type for a deposit record
+interface DepositRecord {
+  id: string;
+  user_id: string;
+  amount: number;
+  coin_type: string;
+  status: string;
+  payment_proof: string | null;
+  created_at: string;
+  users?: UserInfo | null;
+}
+
 export async function GET() {
   try {
     const { data, error } = await supabaseAdmin
@@ -28,16 +46,17 @@ export async function GET() {
 
     if (error) throw error;
 
-    // Merge nested user data for cleaner frontend mapping
-    const formatted = data.map((d) => ({
+    const formatted = (data as unknown as DepositRecord[]).map((d) => ({
       ...d,
-      username: d.users?.username || "Unknown",
-      email: d.users?.email || "N/A",
+      username: d.users?.username ?? "Unknown",
+      email: d.users?.email ?? "N/A",
     }));
 
     return NextResponse.json(formatted);
-  } catch (err: any) {
-    console.error("❌ Error fetching deposits:", err.message);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "An unexpected error occurred.";
+    console.error("❌ Error fetching deposits:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

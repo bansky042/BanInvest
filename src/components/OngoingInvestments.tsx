@@ -18,22 +18,30 @@ interface Investment {
   status: string;
 }
 
+interface UserData {
+  deposit_balance: number;
+  username: string;
+}
+
 export default function OngoingInvestments() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
   const [investments, setInvestments] = useState<Investment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
   const [confirmModal, setConfirmModal] = useState<Investment | null>(null);
-  const [stoppingId, setStoppingId] = useState<string | null>(null); // ✅ Track active stop process
+  const [stoppingId, setStoppingId] = useState<string | null>(null);
 
+  // ✅ Fetch active investments for logged-in user
   const fetchInvestments = async () => {
     setLoading(true);
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
+
       if (!user) {
+        setInvestments([]);
         setLoading(false);
         return;
       }
@@ -46,9 +54,10 @@ export default function OngoingInvestments() {
         .order("start_date", { ascending: false });
 
       if (error) throw error;
-      setInvestments((data as Investment[]) || []);
+      setInvestments((data as Investment[]) ?? []);
     } catch (err) {
-      console.error("Error fetching investments:", err);
+      const error = err as Error;
+      console.error("❌ Error fetching investments:", error.message);
     } finally {
       setLoading(false);
     }
@@ -58,8 +67,9 @@ export default function OngoingInvestments() {
     fetchInvestments();
   }, []);
 
-  const calculateProgress = (start: string, end: string) => {
-    const now = new Date().getTime();
+  // ✅ Progress percentage
+  const calculateProgress = (start: string, end: string): number => {
+    const now = Date.now();
     const startTime = new Date(start).getTime();
     const endTime = new Date(end).getTime();
     const total = endTime - startTime;
@@ -67,8 +77,9 @@ export default function OngoingInvestments() {
     return Math.min((elapsed / total) * 100, 100);
   };
 
-  const calculateRemainingTime = (end: string) => {
-    const now = new Date().getTime();
+  // ✅ Countdown timer
+  const calculateRemainingTime = (end: string): string => {
+    const now = Date.now();
     const endTime = new Date(end).getTime();
     const diff = endTime - now;
     if (diff <= 0) return "Completed";
@@ -81,6 +92,7 @@ export default function OngoingInvestments() {
     return `${days}d ${hours}h ${mins}m ${secs}s`;
   };
 
+  // ✅ Live countdown refresh every second
   useEffect(() => {
     const interval = setInterval(() => {
       setInvestments((prev) => [...prev]);
@@ -88,30 +100,37 @@ export default function OngoingInvestments() {
     return () => clearInterval(interval);
   }, []);
 
-  // 🛑 Stop investment logic
-  const handleStopInvestment = async (inv: Investment) => {
-    setStoppingId(inv.id); // ✅ Disable button for this investment
+  // 🛑 Stop investment
+  const handleStopInvestment = async (inv: Investment): Promise<void> => {
+    setStoppingId(inv.id);
+
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) return toast.error("Please log in");
 
-      const userEmail = user.email;
+      if (!user) {
+        toast.error("Please log in first.");
+        return;
+      }
+
       const userId = user.id;
+      const userEmail = user.email ?? "Unknown";
 
+      // ✅ Get user balance
       const { data: userData, error: userErr } = await supabase
         .from("users")
         .select("deposit_balance, username")
         .eq("id", userId)
-        .single();
+        .single<UserData>();
 
       if (userErr || !userData)
-        throw new Error(userErr?.message || "User not found");
+        throw new Error(userErr?.message || "User not found.");
 
       const refundAmount = inv.amount;
       const newBalance = (userData.deposit_balance || 0) + refundAmount;
 
+      // ✅ Update balance
       const { error: updateErr } = await supabase
         .from("users")
         .update({ deposit_balance: newBalance })
@@ -119,6 +138,7 @@ export default function OngoingInvestments() {
 
       if (updateErr) throw new Error(updateErr.message);
 
+      // ✅ Delete investment
       const { error: invErr } = await supabase
         .from("investments")
         .delete()
@@ -126,7 +146,7 @@ export default function OngoingInvestments() {
 
       if (invErr) throw new Error(invErr.message);
 
-      // ✅ Send notification email
+      // ✅ Send email notification
       const emailPayload = {
         type: "stopped",
         username: userData.username,
@@ -144,22 +164,22 @@ export default function OngoingInvestments() {
 
         if (!emailRes.ok) {
           const text = await emailRes.text();
-          console.warn("Email send failed:", text);
+          console.warn("⚠️ Email send failed:", text);
         }
       } catch (mailErr) {
-        console.error("📧 Email sending error:", mailErr);
+        const error = mailErr as Error;
+        console.error("📧 Email error:", error.message);
       }
 
-      toast.success(`Investment stopped and $${refundAmount} refunded`);
+      toast.success(`Investment stopped — $${refundAmount} refunded.`);
       setConfirmModal(null);
       fetchInvestments();
-    } catch (err: any) {
-      const message =
-        err?.message || err?.error_description || JSON.stringify(err);
-      console.error("❌ Stop investment error:", message);
+    } catch (err) {
+      const error = err as Error;
+      console.error("❌ Stop investment error:", error.message);
       toast.error("Failed to stop investment. Please try again.");
     } finally {
-      setStoppingId(null); // ✅ Re-enable button
+      setStoppingId(null);
     }
   };
 
@@ -235,7 +255,7 @@ export default function OngoingInvestments() {
                       className="h-full bg-gradient-to-r from-purple-600 to-teal-500"
                       animate={{ width: `${progress}%` }}
                       transition={{ duration: 0.5 }}
-                    ></motion.div>
+                    />
                   </div>
 
                   {inv.status === "active" && (
@@ -284,7 +304,7 @@ export default function OngoingInvestments() {
               <div className="flex gap-4 justify-center">
                 <button
                   onClick={() => handleStopInvestment(confirmModal)}
-                  disabled={stoppingId === confirmModal.id} // ✅ Disable while processing
+                  disabled={stoppingId === confirmModal.id}
                   className={`px-5 py-2.5 rounded-lg font-semibold text-white ${
                     stoppingId === confirmModal.id
                       ? "bg-gray-500 cursor-not-allowed"

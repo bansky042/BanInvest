@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, ChangeEvent, FormEvent } from "react";
 import { motion } from "framer-motion";
 import { useTheme } from "@/context/ThemeContext";
 import Sidebar from "@/components/Sidebar";
@@ -8,17 +8,32 @@ import { supabase } from "@/lib/createclient";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import type { User } from "@supabase/supabase-js";
+
+interface Profile {
+  full_name: string;
+  username: string;
+  phone: string;
+  profile_image?: string | null;
+}
+
+interface FormData {
+  full_name: string;
+  username: string;
+  phone: string;
+  password: string;
+}
 
 export default function SettingsPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const router = useRouter();
 
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-     const [saving, setSaving] = useState(false); // add this new state at top
-  const [formData, setFormData] = useState({
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState<FormData>({
     full_name: "",
     username: "",
     phone: "",
@@ -44,19 +59,19 @@ export default function SettingsPage() {
         .from("users")
         .select("full_name, username, phone, profile_image")
         .eq("id", user.id)
-        .single();
+        .single<Profile>();
 
       if (error) {
         console.error("Error loading profile:", error);
         toast.error("Failed to load profile");
-      } else {
+      } else if (profile) {
         setFormData({
-          full_name: profile?.full_name || "",
-          username: profile?.username || "",
-          phone: profile?.phone || "",
+          full_name: profile.full_name || "",
+          username: profile.username || "",
+          phone: profile.phone || "",
           password: "",
         });
-        setProfileImage(profile?.profile_image || null);
+        setProfileImage(profile.profile_image || null);
       }
     };
 
@@ -64,12 +79,12 @@ export default function SettingsPage() {
   }, [router]);
 
   // 🧠 Handle input change
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // 🖼️ Handle Profile Image Upload (same logic as Dashboard)
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // 🖼️ Handle Profile Image Upload
+  const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     try {
       const file = event.target.files?.[0];
       if (!file || !user) return;
@@ -78,7 +93,6 @@ export default function SettingsPage() {
 
       const fileExt = file.name.split(".").pop();
       const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-      const filePath = `profile_images/${fileName}`;
 
       // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
@@ -94,7 +108,7 @@ export default function SettingsPage() {
 
       const imageUrl = data.publicUrl;
 
-      // Update user profile with new image URL
+      // Update user profile
       const { error: updateError } = await supabase
         .from("users")
         .update({ profile_image: imageUrl })
@@ -104,7 +118,7 @@ export default function SettingsPage() {
 
       setProfileImage(imageUrl);
       toast.success("Profile image updated!");
-    } catch (err: any) {
+    } catch (err) {
       console.error("Image upload failed:", err);
       toast.error("Failed to upload image");
     } finally {
@@ -112,13 +126,11 @@ export default function SettingsPage() {
     }
   };
 
-
-
   // 💾 Handle profile update
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    if (saving) return; // prevent double submit
+    if (saving || !user) return;
     setSaving(true);
 
     try {
@@ -133,7 +145,7 @@ export default function SettingsPage() {
 
       if (updateError) throw updateError;
 
-      // Update password (optional)
+      // Optional: update password
       if (formData.password) {
         const { error: passError } = await supabase.auth.updateUser({
           password: formData.password,
@@ -142,15 +154,10 @@ export default function SettingsPage() {
       }
 
       toast.success("Profile updated successfully!");
-
-      // Clear password field
       setFormData((prev) => ({ ...prev, password: "" }));
 
-      // Redirect after short delay
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 1000);
-    } catch (err: any) {
+      setTimeout(() => router.push("/dashboard"), 1000);
+    } catch (err) {
       console.error("Update failed:", err);
       toast.error("Failed to update profile");
     } finally {
@@ -158,22 +165,16 @@ export default function SettingsPage() {
     }
   };
 
-
-  
-useEffect(() => {
-  const checkUser = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      router.push("/auth/signin");
-    }
-  };
-
-  checkUser();
-}, [router]);
-
+  // 🚪 Redirect if not logged in
+  useEffect(() => {
+    const checkUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) router.push("/auth/signin");
+    };
+    checkUser();
+  }, [router]);
 
   return (
     <div
@@ -194,15 +195,11 @@ useEffect(() => {
               : "bg-white border-gray-200"
           }`}
         >
-          <motion.h1
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-3xl font-bold mb-10 text-center"
-          >
+          <h1 className="text-3xl font-bold mb-10 text-center">
             ⚙️ Account Settings
-          </motion.h1>
+          </h1>
 
-          {/* ✅ Profile Image Upload */}
+          {/* Profile Image Upload */}
           <div className="flex flex-col items-center mb-6">
             <div className="relative w-24 h-24 rounded-full overflow-hidden border-2 border-teal-400">
               <Image
@@ -224,55 +221,33 @@ useEffect(() => {
             </label>
           </div>
 
-          {/* 🧾 Settings Form */}
+          {/* Settings Form */}
           <form onSubmit={handleSave} className="space-y-6">
-            <div>
-              <label className="block text-sm mb-2">Full Name</label>
-              <input
-                type="text"
-                name="full_name"
-                value={formData.full_name}
-                onChange={handleChange}
-                placeholder="John Doe"
-                className={`w-full p-3 rounded-lg border outline-none ${
-                  isDark
-                    ? "bg-[#0F001F] border-purple-900 focus:border-teal-400"
-                    : "bg-gray-50 border-gray-300 focus:border-teal-500"
-                }`}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm mb-2">Username</label>
-              <input
-                type="text"
-                name="username"
-                value={formData.username}
-                onChange={handleChange}
-                placeholder="johndoe"
-                className={`w-full p-3 rounded-lg border outline-none ${
-                  isDark
-                    ? "bg-[#0F001F] border-purple-900 focus:border-teal-400"
-                    : "bg-gray-50 border-gray-300 focus:border-teal-500"
-                }`}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm mb-2">Phone Number</label>
-              <input
-                type="text"
-                name="phone"
-                value={formData.phone}
-                onChange={handleChange}
-                placeholder="+234 8012345678"
-                className={`w-full p-3 rounded-lg border outline-none ${
-                  isDark
-                    ? "bg-[#0F001F] border-purple-900 focus:border-teal-400"
-                    : "bg-gray-50 border-gray-300 focus:border-teal-500"
-                }`}
-              />
-            </div>
+            {[
+              { label: "Full Name", name: "full_name", placeholder: "John Doe" },
+              { label: "Username", name: "username", placeholder: "johndoe" },
+              {
+                label: "Phone Number",
+                name: "phone",
+                placeholder: "+234 8012345678",
+              },
+            ].map((field) => (
+              <div key={field.name}>
+                <label className="block text-sm mb-2">{field.label}</label>
+                <input
+                  type="text"
+                  name={field.name}
+                  value={(formData as any)[field.name]}
+                  onChange={handleChange}
+                  placeholder={field.placeholder}
+                  className={`w-full p-3 rounded-lg border outline-none ${
+                    isDark
+                      ? "bg-[#0F001F] border-purple-900 focus:border-teal-400"
+                      : "bg-gray-50 border-gray-300 focus:border-teal-500"
+                  }`}
+                />
+              </div>
+            ))}
 
             <div>
               <label className="block text-sm mb-2">New Password</label>
@@ -294,17 +269,16 @@ useEffect(() => {
             </div>
 
             <button
-  type="submit"
-  disabled={saving}
-  className={`w-full py-3 rounded-lg text-white font-semibold transition ${
-    saving
-      ? "bg-gray-400 cursor-not-allowed"
-      : "bg-gradient-to-r from-purple-600 to-teal-500 hover:opacity-90"
-  }`}
->
-  {saving ? "Saving..." : "Save Changes"}
-</button>
-
+              type="submit"
+              disabled={saving}
+              className={`w-full py-3 rounded-lg text-white font-semibold transition ${
+                saving
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-gradient-to-r from-purple-600 to-teal-500 hover:opacity-90"
+              }`}
+            >
+              {saving ? "Saving..." : "Save Changes"}
+            </button>
           </form>
         </motion.div>
       </main>

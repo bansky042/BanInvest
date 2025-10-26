@@ -11,6 +11,26 @@ interface AuthFormProps {
   type: "signin" | "signup";
 }
 
+interface InputFieldProps {
+  label: string;
+  name: string;
+  type?: string;
+  placeholder?: string;
+  theme: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  required?: boolean;
+}
+
+interface FormData {
+  fullName: string;
+  username: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  country: string;
+  phone: string;
+}
+
 export default function AuthForm({ type }: AuthFormProps) {
   const router = useRouter();
   const params = useSearchParams();
@@ -21,7 +41,7 @@ export default function AuthForm({ type }: AuthFormProps) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     fullName: "",
     username: "",
     email: "",
@@ -43,7 +63,7 @@ export default function AuthForm({ type }: AuthFormProps) {
     }
   }, [referralCodeFromURL]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (loading) return;
     setLoading(true);
@@ -77,7 +97,7 @@ export default function AuthForm({ type }: AuthFormProps) {
         if (error) throw error;
         if (!data?.user) throw new Error("Failed to create user.");
 
-        // ✅ Insert new user record into your "users" table
+        // ✅ Insert new user record into "users" table
         const { error: insertError } = await supabase.from("users").insert([
           {
             id: data.user.id,
@@ -86,7 +106,7 @@ export default function AuthForm({ type }: AuthFormProps) {
             country: formData.country,
             phone: formData.phone,
             referral_code: referralCode,
-            referred_by: referredBy || null, // ✅ Save the referral relationship
+            referred_by: referredBy || null,
             deposit_balance: 0,
             profit_balance: 0,
             affiliate_balance: 0,
@@ -108,9 +128,8 @@ export default function AuthForm({ type }: AuthFormProps) {
         });
 
         alert("✅ Account created! Please verify your email before signing in.");
-        localStorage.removeItem("referralId"); // clear ref after signup
+        localStorage.removeItem("referralId");
         router.push("/auth/signin");
-
       } else {
         // ✅ Sign In Flow
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -119,7 +138,7 @@ export default function AuthForm({ type }: AuthFormProps) {
         });
         if (error) throw error;
 
-        // ✅ Get IP & location (optional)
+        // ✅ Get IP & location
         let ipAddress = "Unknown";
         let location = "Unknown";
         try {
@@ -129,8 +148,8 @@ export default function AuthForm({ type }: AuthFormProps) {
             ipAddress = ipData.ip || "Unknown";
             location = `${ipData.city || "Unknown City"}, ${ipData.country_name || "Unknown Country"}`;
           }
-        } catch (err) {
-          console.error("🌍 Failed to fetch location:", err);
+        } catch (fetchErr) {
+          console.error("🌍 Failed to fetch location:", fetchErr);
         }
 
         // ✅ Send login email
@@ -147,9 +166,10 @@ export default function AuthForm({ type }: AuthFormProps) {
 
         router.push("/dashboard");
       }
-    } catch (err: any) {
-      console.error("Auth error:", err);
-      setErrorMsg(err.message || "An unexpected error occurred.");
+    } catch (err) {
+      const error = err as Error;
+      console.error("Auth error:", error);
+      setErrorMsg(error.message || "An unexpected error occurred.");
     } finally {
       setLoading(false);
     }
@@ -168,8 +188,9 @@ export default function AuthForm({ type }: AuthFormProps) {
         },
       });
       if (error) throw error;
-    } catch (err: any) {
-      setErrorMsg(err.message || "Google sign-in failed");
+    } catch (err) {
+      const error = err as Error;
+      setErrorMsg(error.message || "Google sign-in failed");
     } finally {
       setLoading(false);
     }
@@ -270,7 +291,15 @@ export default function AuthForm({ type }: AuthFormProps) {
   );
 }
 
-function InputField({ label, name, type = "text", placeholder, theme, onChange, required }: any) {
+function InputField({
+  label,
+  name,
+  type = "text",
+  placeholder,
+  theme,
+  onChange,
+  required,
+}: InputFieldProps) {
   return (
     <div>
       <label className="block text-sm font-medium mb-1">{label}</label>

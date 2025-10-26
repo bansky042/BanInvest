@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useTheme } from "@/context/ThemeContext";
@@ -7,14 +8,39 @@ import { ArrowDownCircle, ArrowUpCircle } from "lucide-react";
 import { supabase } from "@/lib/createclient";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import type { User } from "@supabase/supabase-js";
+
+// 🧩 Define database record types
+interface Deposit {
+  id: string;
+  amount: number;
+  status: string;
+  created_at: string;
+}
+
+interface Withdrawal {
+  id: string;
+  amount: number;
+  status: string;
+  created_at: string;
+}
+
+// 🧾 Unified transaction type for display
+interface Transaction {
+  id: string;
+  type: "Deposit" | "Withdrawal";
+  amount: string;
+  status: string;
+  date: string;
+}
 
 export default function TransactionHistoryPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const router = useRouter();
 
-  const [transactions, setTransactions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     const fetchTransactions = async () => {
@@ -34,7 +60,8 @@ export default function TransactionHistoryPage() {
         const { data: deposits, error: depError } = await supabase
           .from("deposits")
           .select("id, amount, status, created_at")
-          .eq("user_id", user.id);
+          .eq("user_id", user.id)
+          .returns<Deposit[]>();
 
         if (depError) throw depError;
 
@@ -42,12 +69,13 @@ export default function TransactionHistoryPage() {
         const { data: withdrawals, error: wdError } = await supabase
           .from("withdrawals")
           .select("id, amount, status, created_at")
-          .eq("user_id", user.id);
+          .eq("user_id", user.id)
+          .returns<Withdrawal[]>();
 
         if (wdError) throw wdError;
 
         // Format both and merge
-        const formattedDeposits = (deposits || []).map((d) => ({
+        const formattedDeposits: Transaction[] = (deposits || []).map((d) => ({
           id: d.id,
           type: "Deposit",
           amount: `$${Number(d.amount).toLocaleString()}`,
@@ -59,7 +87,7 @@ export default function TransactionHistoryPage() {
           }),
         }));
 
-        const formattedWithdrawals = (withdrawals || []).map((w) => ({
+        const formattedWithdrawals: Transaction[] = (withdrawals || []).map((w) => ({
           id: w.id,
           type: "Withdrawal",
           amount: `$${Number(w.amount).toLocaleString()}`,
@@ -72,13 +100,13 @@ export default function TransactionHistoryPage() {
         }));
 
         // Merge & sort by date
-        const all = [...formattedDeposits, ...formattedWithdrawals].sort(
+        const all: Transaction[] = [...formattedDeposits, ...formattedWithdrawals].sort(
           (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
         );
 
         setTransactions(all);
-      } catch (err: any) {
-        console.error("Error fetching transactions:", err.message);
+      } catch (err) {
+        console.error("Error fetching transactions:", err);
         toast.error("Failed to load transactions.");
       } finally {
         setLoading(false);
@@ -118,11 +146,15 @@ export default function TransactionHistoryPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
           className={`rounded-2xl overflow-hidden border shadow-xl ${
-            isDark ? "bg-[#13002A]/60 border-purple-900" : "bg-white border-gray-200"
+            isDark
+              ? "bg-[#13002A]/60 border-purple-900"
+              : "bg-white border-gray-200"
           }`}
         >
           {loading ? (
-            <div className="p-10 text-center text-gray-400">Loading transactions...</div>
+            <div className="p-10 text-center text-gray-400">
+              Loading transactions...
+            </div>
           ) : transactions.length === 0 ? (
             <div className="p-10 text-center text-gray-400">
               No transactions found yet.

@@ -1,9 +1,16 @@
-import nodemailer from "nodemailer";
+import nodemailer, { type SentMessageInfo } from "nodemailer";
 
-export async function sendEmail(to: string, subject: string, html: string) {
+interface EmailResponse {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+}
+
+export async function sendEmail(to: string, subject: string, html: string): Promise<EmailResponse> {
   try {
     // ✅ Validate environment variables
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    const { EMAIL_USER, EMAIL_PASS } = process.env;
+    if (!EMAIL_USER || !EMAIL_PASS) {
       throw new Error("Missing EMAIL_USER or EMAIL_PASS in environment variables");
     }
 
@@ -12,33 +19,38 @@ export async function sendEmail(to: string, subject: string, html: string) {
       throw new Error(`Invalid recipient email address: ${to}`);
     }
     if (!subject || !html) {
-      throw new Error("Email subject or body is missing");
+      throw new Error("Email subject or HTML body is missing");
     }
 
     // ✅ Create reusable transporter
     const transporter = nodemailer.createTransport({
-      service: "gmail", // use Gmail preset for reliability
+      service: "gmail",
       auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
+        user: EMAIL_USER,
+        pass: EMAIL_PASS,
       },
     });
 
     // ✅ Define message
     const mailOptions = {
-      from: `"BanMarket" <${process.env.EMAIL_USER}>`,
+      from: `"BanMarket" <${EMAIL_USER}>`,
       to: to.trim(),
       subject: subject.trim(),
       html,
     };
 
     // ✅ Send and log result
-    const info = await transporter.sendMail(mailOptions);
+    const info: SentMessageInfo = await transporter.sendMail(mailOptions);
 
     console.log(`✅ Email sent to ${to}: ${info.messageId || "No messageId"}`);
     return { success: true, messageId: info.messageId };
-  } catch (error: any) {
-    console.error("❌ Email send error:", error.message || error);
-    return { success: false, error: error.message || "Email sending failed" };
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error("❌ Email send error:", error.message);
+      return { success: false, error: error.message };
+    }
+
+    console.error("❌ Unknown email error:", error);
+    return { success: false, error: "Unknown email sending error" };
   }
 }

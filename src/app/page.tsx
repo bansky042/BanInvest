@@ -9,10 +9,11 @@ import Testimonials from "@/components/Testimonials";
 import FAQ from "@/components/FAQ";
 import CryptoMarketTable from "@/components/CryptoChart";
 import Loader from "@/components/Loader";
+import type { User } from "@supabase/supabase-js";
 
 export default function Home() {
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
 
   // 🧩 Get Supabase user session
   useEffect(() => {
@@ -20,7 +21,7 @@ export default function Home() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      setUser(session?.user || null);
+      setUser(session?.user ?? null);
       setLoading(false);
     }
 
@@ -29,7 +30,7 @@ export default function Home() {
     // 🔁 Listen for auth state changes (sign in/out)
     const { data: listener } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
-        setUser(session?.user || null);
+        setUser(session?.user ?? null);
       }
     );
 

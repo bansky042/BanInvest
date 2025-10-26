@@ -8,8 +8,26 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "../../../context/ThemeContext";
 import { BarChart3, CheckCircle, Clock, XCircle } from "lucide-react";
 
+// ✅ Define types for withdrawal and user records
+interface Withdrawal {
+  id: string;
+  user_id: string;
+  username: string;
+  coin_type: string;
+  wallet_address: string;
+  amount: number;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+}
+
+interface UserRecord {
+  profit_balance: number;
+  email?: string | null;
+  username?: string | null;
+}
+
 export default function AdminWithdrawalsPage() {
-  const [withdrawals, setWithdrawals] = useState<any[]>([]);
+  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { theme } = useTheme();
@@ -17,7 +35,11 @@ export default function AdminWithdrawalsPage() {
   // ✅ Protect route for admin users
   useEffect(() => {
     const checkAdmin = async () => {
-      const { data: { user }, error } = await supabase.auth.getUser();
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
+
       if (error || !user) return router.push("/auth/signin");
 
       const { data: profile } = await supabase
@@ -43,83 +65,94 @@ export default function AdminWithdrawalsPage() {
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) toast.error("Failed to load withdrawals");
-      else setWithdrawals(data || []);
-
+      if (error) {
+        toast.error("Failed to load withdrawals");
+      } else {
+        setWithdrawals((data as Withdrawal[]) || []);
+      }
       setLoading(false);
     };
+
     fetchWithdrawals();
   }, []);
 
-  const handleApprove = async (withdrawal: any) => {
-  try {
-    const { data: userRecord, error: userErr } = await supabase
-      .from("users")
-      .select("profit_balance, email, username")
-      .eq("id", withdrawal.user_id)
-      .single();
-
-    if (userErr || !userRecord) throw new Error("User not found.");
-
-    const currentBalance = parseFloat(userRecord.profit_balance || 0);
-    if (currentBalance < withdrawal.amount)
-      return toast.error("Insufficient balance for withdrawal.");
-
-    const newBalance = currentBalance - withdrawal.amount;
-
-    // ✅ Update balance and mark withdrawal approved
-    const { error: updateError } = await supabase
-      .from("users")
-      .update({ profit_balance: newBalance })
-      .eq("id", withdrawal.user_id);
-
-    if (updateError) throw updateError;
-
-    await supabase
-      .from("withdrawals")
-      .update({ status: "approved" })
-      .eq("id", withdrawal.id);
-
-    // ✅ Optional: Send notification email
-    if (userRecord.email) {
-      await fetch("/api/admin-transaction", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "withdrawal",
-          status: "approved",
-          username: userRecord.username || "User",
-          userEmail: userRecord.email,
-          amount: withdrawal.amount,
-        }),
-      });
-    }
-
-    // ✅ Update local state
-    setWithdrawals((prev) =>
-      prev.map((w) =>
-        w.id === withdrawal.id ? { ...w, status: "approved" } : w
-      )
-    );
-
-    // ✅ Safe toast
-    toast.success(
-      `✅ Approved withdrawal for ${userRecord?.username ?? "User"}`
-    );
-  } catch (err: any) {
-    console.error("Approve withdrawal error:", err.message || err);
-    toast.error("Failed to approve withdrawal");
-  }
-};
-
-
-  const handleReject = async (withdrawal: any) => {
+  // ✅ Approve handler
+  const handleApprove = async (withdrawal: Withdrawal) => {
     try {
-      await supabase.from("withdrawals").update({ status: "rejected" }).eq("id", withdrawal.id);
-      toast.error("Withdrawal rejected");
+      const { data: userRecord, error: userErr } = await supabase
+        .from("users")
+        .select("profit_balance, email, username")
+        .eq("id", withdrawal.user_id)
+        .single<UserRecord>();
+
+      if (userErr || !userRecord) throw new Error("User not found.");
+
+      const currentBalance = parseFloat(String(userRecord.profit_balance || 0));
+      if (currentBalance < withdrawal.amount)
+        return toast.error("Insufficient balance for withdrawal.");
+
+      const newBalance = currentBalance - withdrawal.amount;
+
+      // ✅ Update user balance
+      const { error: updateError } = await supabase
+        .from("users")
+        .update({ profit_balance: newBalance })
+        .eq("id", withdrawal.user_id);
+
+      if (updateError) throw updateError;
+
+      // ✅ Mark withdrawal approved
+      await supabase
+        .from("withdrawals")
+        .update({ status: "approved" })
+        .eq("id", withdrawal.id);
+
+      // ✅ Optional email notification
+      if (userRecord.email) {
+        await fetch("/api/admin-transaction", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "withdrawal",
+            status: "approved",
+            username: userRecord.username || "User",
+            userEmail: userRecord.email,
+            amount: withdrawal.amount,
+          }),
+        });
+      }
+
+      // ✅ Update local state
       setWithdrawals((prev) =>
-        prev.map((w) => (w.id === withdrawal.id ? { ...w, status: "rejected" } : w))
+        prev.map((w) =>
+          w.id === withdrawal.id ? { ...w, status: "approved" } : w
+        )
       );
+
+      toast.success(
+        `✅ Approved withdrawal for ${userRecord.username ?? "User"}`
+      );
+    } catch (err) {
+      console.error("Approve withdrawal error:", err);
+      toast.error("Failed to approve withdrawal");
+    }
+  };
+
+  // ✅ Reject handler
+  const handleReject = async (withdrawal: Withdrawal) => {
+    try {
+      await supabase
+        .from("withdrawals")
+        .update({ status: "rejected" })
+        .eq("id", withdrawal.id);
+
+      setWithdrawals((prev) =>
+        prev.map((w) =>
+          w.id === withdrawal.id ? { ...w, status: "rejected" } : w
+        )
+      );
+
+      toast.error("Withdrawal rejected");
     } catch (err) {
       toast.error("Failed to reject withdrawal");
     }
@@ -140,7 +173,9 @@ export default function AdminWithdrawalsPage() {
       }`}
     >
       <div className="mb-10">
-        <h1 className="text-3xl font-extrabold mb-2">🏦 Withdrawal Dashboard</h1>
+        <h1 className="text-3xl font-extrabold mb-2">
+          🏦 Withdrawal Dashboard
+        </h1>
         <p className="text-gray-500 dark:text-gray-400">
           Manage and monitor all user withdrawal requests in real time.
         </p>
@@ -266,6 +301,7 @@ export default function AdminWithdrawalsPage() {
   );
 }
 
+// ✅ SummaryCard component
 const SummaryCard = ({
   title,
   value,
