@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic"; // Prevents Next.js prerendering errors
+
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/createclient";
@@ -52,13 +54,13 @@ export default function AuthForm({ type }: AuthFormProps) {
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
 
   const generateReferralCode = () => `BAN-${nanoid(6).toUpperCase()}`;
 
-  // ✅ Save referral ID from URL to localStorage
+  // ✅ Save referral ID safely
   useEffect(() => {
-    if (referralCodeFromURL) {
+    if (typeof window !== "undefined" && referralCodeFromURL) {
       localStorage.setItem("referralId", referralCodeFromURL);
     }
   }, [referralCodeFromURL]);
@@ -77,7 +79,10 @@ export default function AuthForm({ type }: AuthFormProps) {
           throw new Error("Passwords do not match.");
 
         const referralCode = generateReferralCode();
-        const referredBy = localStorage.getItem("referralId");
+        const referredBy =
+          typeof window !== "undefined"
+            ? localStorage.getItem("referralId")
+            : null;
 
         // ✅ Create user in Supabase Auth
         const { data, error } = await supabase.auth.signUp({
@@ -97,7 +102,7 @@ export default function AuthForm({ type }: AuthFormProps) {
         if (error) throw error;
         if (!data?.user) throw new Error("Failed to create user.");
 
-        // ✅ Insert new user record into "users" table
+        // ✅ Insert user record in 'users' table
         const { error: insertError } = await supabase.from("users").insert([
           {
             id: data.user.id,
@@ -114,31 +119,30 @@ export default function AuthForm({ type }: AuthFormProps) {
             email: formData.email,
           },
         ]);
-
         if (insertError) throw insertError;
 
-        // ✅ Send Welcome Email
-        await fetch("/api/email/signup", {
+        // ✅ Send welcome email (no await needed for UI)
+        fetch("/api/email/signup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             email: formData.email,
             username: formData.username || formData.fullName,
           }),
-        });
+        }).catch(console.error);
 
-        alert("✅ Account created! Please verify your email before signing in.");
-        localStorage.removeItem("referralId");
+        alert("✅ Account created! Please verify your email.");
+        if (typeof window !== "undefined") localStorage.removeItem("referralId");
         router.push("/auth/signin");
       } else {
-        // ✅ Sign In Flow
+        // ✅ Sign In
         const { data, error } = await supabase.auth.signInWithPassword({
           email: formData.email,
           password: formData.password,
         });
         if (error) throw error;
 
-        // ✅ Get IP & location
+        // ✅ Optional: Get IP info (safe to ignore failure)
         let ipAddress = "Unknown";
         let location = "Unknown";
         try {
@@ -146,14 +150,16 @@ export default function AuthForm({ type }: AuthFormProps) {
           if (ipRes.ok) {
             const ipData = await ipRes.json();
             ipAddress = ipData.ip || "Unknown";
-            location = `${ipData.city || "Unknown City"}, ${ipData.country_name || "Unknown Country"}`;
+            location = `${ipData.city || "Unknown City"}, ${
+              ipData.country_name || "Unknown Country"
+            }`;
           }
-        } catch (fetchErr) {
-          console.error("🌍 Failed to fetch location:", fetchErr);
+        } catch {
+          /* ignore network failure */
         }
 
         // ✅ Send login email
-        await fetch("/api/email/login", {
+        fetch("/api/email/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -162,14 +168,17 @@ export default function AuthForm({ type }: AuthFormProps) {
             ipAddress,
             location,
           }),
-        });
+        }).catch(console.error);
 
         router.push("/dashboard");
       }
     } catch (err) {
-      const error = err as Error;
-      console.error("Auth error:", error);
-      setErrorMsg(error.message || "An unexpected error occurred.");
+      console.error("Auth error:", err);
+      setErrorMsg(
+        err instanceof Error
+          ? err.message
+          : "An unexpected error occurred during authentication."
+      );
     } finally {
       setLoading(false);
     }
@@ -189,14 +198,16 @@ export default function AuthForm({ type }: AuthFormProps) {
       });
       if (error) throw error;
     } catch (err) {
-      const error = err as Error;
-      setErrorMsg(error.message || "Google sign-in failed");
+      console.error("Google Auth error:", err);
+      setErrorMsg(
+        err instanceof Error ? err.message : "Google sign-in failed."
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ Avoid redirect loop when a signed-in user visits signup
+  // ✅ Redirect logged-in users
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (data.session && !isSignup) {
@@ -230,20 +241,71 @@ export default function AuthForm({ type }: AuthFormProps) {
           {isSignup ? "Create Your Account" : "Welcome Back"}
         </h1>
 
-        {errorMsg && <p className="text-red-500 text-center mb-4 text-sm">{errorMsg}</p>}
+        {errorMsg && (
+          <p className="text-red-500 text-center mb-4 text-sm">{errorMsg}</p>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {isSignup && (
             <>
-              <InputField label="Full Name" name="fullName" theme={theme} onChange={handleChange} required />
-              <InputField label="Username" name="username" theme={theme} onChange={handleChange} required />
-              <InputField label="Country" name="country" placeholder="e.g., Nigeria" theme={theme} onChange={handleChange} required />
-              <InputField label="Phone Number" name="phone" placeholder="+234 812 345 6789" theme={theme} onChange={handleChange} required />
+              <InputField
+                label="Full Name"
+                name="fullName"
+                theme={theme}
+                onChange={handleChange}
+                required
+              />
+              <InputField
+                label="Username"
+                name="username"
+                theme={theme}
+                onChange={handleChange}
+                required
+              />
+              <InputField
+                label="Country"
+                name="country"
+                placeholder="e.g., Nigeria"
+                theme={theme}
+                onChange={handleChange}
+                required
+              />
+              <InputField
+                label="Phone Number"
+                name="phone"
+                placeholder="+234 812 345 6789"
+                theme={theme}
+                onChange={handleChange}
+                required
+              />
             </>
           )}
-          <InputField label="Email" name="email" type="email" theme={theme} onChange={handleChange} required />
-          <InputField label="Password" name="password" type="password" theme={theme} onChange={handleChange} required />
-          {isSignup && <InputField label="Confirm Password" name="confirmPassword" type="password" theme={theme} onChange={handleChange} required />}
+          <InputField
+            label="Email"
+            name="email"
+            type="email"
+            theme={theme}
+            onChange={handleChange}
+            required
+          />
+          <InputField
+            label="Password"
+            name="password"
+            type="password"
+            theme={theme}
+            onChange={handleChange}
+            required
+          />
+          {isSignup && (
+            <InputField
+              label="Confirm Password"
+              name="confirmPassword"
+              type="password"
+              theme={theme}
+              onChange={handleChange}
+              required
+            />
+          )}
 
           <button
             type="submit"
@@ -254,14 +316,32 @@ export default function AuthForm({ type }: AuthFormProps) {
                 : "bg-gradient-to-r from-purple-500 to-teal-500 text-white"
             }`}
           >
-            {loading ? "Please wait..." : isSignup ? "Create Account" : "Sign In"}
+            {loading
+              ? "Please wait..."
+              : isSignup
+              ? "Create Account"
+              : "Sign In"}
           </button>
         </form>
 
         <div className="flex items-center my-6">
-          <hr className={`flex-1 ${theme === "dark" ? "border-gray-700" : "border-gray-300"}`} />
-          <span className={`px-3 text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>or</span>
-          <hr className={`flex-1 ${theme === "dark" ? "border-gray-700" : "border-gray-300"}`} />
+          <hr
+            className={`flex-1 ${
+              theme === "dark" ? "border-gray-700" : "border-gray-300"
+            }`}
+          />
+          <span
+            className={`px-3 text-sm ${
+              theme === "dark" ? "text-gray-400" : "text-gray-500"
+            }`}
+          >
+            or
+          </span>
+          <hr
+            className={`flex-1 ${
+              theme === "dark" ? "border-gray-700" : "border-gray-300"
+            }`}
+          />
         </div>
 
         <button
@@ -277,10 +357,16 @@ export default function AuthForm({ type }: AuthFormProps) {
           Continue with Google
         </button>
 
-        <p className={`text-center text-sm mt-6 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
+        <p
+          className={`text-center text-sm mt-6 ${
+            theme === "dark" ? "text-gray-400" : "text-gray-600"
+          }`}
+        >
           {isSignup ? "Already have an account?" : "Don’t have an account?"}{" "}
           <span
-            onClick={() => router.push(isSignup ? "/auth/signin" : "/auth/signup")}
+            onClick={() =>
+              router.push(isSignup ? "/auth/signin" : "/auth/signup")
+            }
             className="cursor-pointer font-medium bg-gradient-to-r from-purple-500 to-teal-400 bg-clip-text text-transparent hover:opacity-80 transition"
           >
             {isSignup ? "Sign in" : "Sign up"}
