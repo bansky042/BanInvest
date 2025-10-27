@@ -24,7 +24,7 @@ export default function InvestmentHistoryPage() {
 
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentTime, setCurrentTime] = useState(Date.now()); // 🔄 live clock
+  const [currentTime, setCurrentTime] = useState(Date.now());
   const router = useRouter();
 
   // ✅ Fetch investments
@@ -45,7 +45,6 @@ export default function InvestmentHistoryPage() {
           .order("start_date", { ascending: false });
 
         if (error) throw error;
-
         setInvestments(data || []);
       } catch (err) {
         console.error("Error fetching investments:", err);
@@ -61,52 +60,35 @@ export default function InvestmentHistoryPage() {
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTime(Date.now());
-    }, 10000); // Update every 10 seconds
+    }, 10000);
     return () => clearInterval(interval);
   }, []);
 
- const calculateLiveProfit = (inv: Investment) => {
-  if (!inv.start_date || !inv.end_date) return { progress: 0, liveProfit: 0 };
+  const calculateLiveProfit = (inv: Investment) => {
+    if (!inv.start_date || !inv.end_date) return { progress: 0, liveProfit: 0 };
 
-  const start = new Date(inv.start_date).getTime();
-  const end = new Date(inv.end_date).getTime();
-  const now = currentTime;
+    const start = new Date(inv.start_date).getTime();
+    const end = new Date(inv.end_date).getTime();
+    const now = currentTime;
 
-  if (now <= start) return { progress: 0, liveProfit: 0 };
+    if (now <= start) return { progress: 0, liveProfit: 0 };
 
-  // ✅ Normalize plan name (remove spaces, lowercase)
-  const plan = inv.plan?.toLowerCase().trim();
+    const plan = inv.plan?.toLowerCase().trim();
+    let profitPercent = 0;
+    if (plan.includes("basic")) profitPercent = 40;
+    else if (plan.includes("standard")) profitPercent = 75;
+    else if (plan.includes("premium")) profitPercent = 100;
+    else profitPercent = inv.profit_percent || 0;
 
-  // ✅ Assign profit percent dynamically
-  let profitPercent = 0;
-  if (plan.includes("basic")) profitPercent = 40;
-  else if (plan.includes("standard")) profitPercent = 75;
-  else if (plan.includes("premium")) profitPercent = 100;
-  else profitPercent = inv.profit_percent || 0; // fallback if custom plan
+    const totalDuration = end - start;
+    const elapsed = Math.min(now - start, totalDuration);
+    const progressRatio = elapsed / totalDuration;
 
-  // ✅ Calculate progress and live profit
-  const totalDuration = end - start;
-  const elapsed = Math.min(now - start, totalDuration);
-  const progressRatio = elapsed / totalDuration;
+    const liveProfit = inv.amount * (profitPercent / 100) * progressRatio;
+    const progressPercent = progressRatio * 100;
 
-  const liveProfit = inv.amount * (profitPercent / 100) * progressRatio;
-  const progressPercent = progressRatio * 100;
-
-  console.log({
-    plan: inv.plan,
-    normalizedPlan: plan,
-    profitPercent,
-    totalDuration,
-    elapsed,
-    progressRatio,
-    liveProfit,
-  });
-
-  return { progress: progressPercent, liveProfit };
-};
-
-
-
+    return { progress: progressPercent, liveProfit };
+  };
 
   return (
     <div
@@ -116,90 +98,100 @@ export default function InvestmentHistoryPage() {
     >
       <Sidebar />
 
-      <main className="flex-1 p-6 md:p-10">
+      <main className="flex-1 p-4 md:p-8 overflow-x-hidden">
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className={`rounded-2xl overflow-hidden border shadow-lg ${
-            isDark ? "bg-[#13002A]/60 border-purple-900" : "bg-white border-gray-200"
+          className={`rounded-2xl border shadow-lg overflow-hidden ${
+            isDark
+              ? "bg-[#13002A]/60 border-purple-900"
+              : "bg-white border-gray-200"
           }`}
         >
           <motion.h1
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-3xl font-bold mb-6 p-6 border-b border-gray-800/30"
+            className="text-2xl sm:text-3xl font-bold mb-4 p-4 sm:p-6 border-b border-gray-800/30"
           >
             📊 Investment History
           </motion.h1>
 
-          {/* Loading state */}
+          {/* Loading */}
           {loading ? (
             <div className="flex justify-center py-10">
               <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
             </div>
           ) : investments.length === 0 ? (
-            <p className="text-center text-gray-400 py-10">No investment history yet.</p>
+            <p className="text-center text-gray-400 py-10">
+              No investment history yet.
+            </p>
           ) : (
-            <table className="w-full text-sm">
-              <thead className={isDark ? "bg-[#1B0035]" : "bg-gray-100"}>
-                <tr>
-                  <th className="p-4 text-left">Plan</th>
-                  <th className="p-4 text-left">Amount</th>
-                  <th className="p-4 text-left">Profit (Live)</th>
-                  <th className="p-4 text-left">Start</th>
-                  <th className="p-4 text-left">End</th>
-                  <th className="p-4 text-left">Status</th>
-                </tr>
-              </thead>
+            // ✅ Responsive scrollable table
+            <div className="overflow-x-auto w-full">
+              <table className="min-w-[700px] w-full text-sm sm:text-base">
+                <thead className={isDark ? "bg-[#1B0035]" : "bg-gray-100"}>
+                  <tr>
+                    <th className="p-4 text-left">Plan</th>
+                    <th className="p-4 text-left">Amount</th>
+                    <th className="p-4 text-left">Profit (Live)</th>
+                    <th className="p-4 text-left">Start</th>
+                    <th className="p-4 text-left">End</th>
+                    <th className="p-4 text-left">Status</th>
+                  </tr>
+                </thead>
 
-              <tbody>
-                {investments.map((inv, index) => {
-                  const { progress, liveProfit } = calculateLiveProfit(inv);
+                <tbody>
+                  {investments.map((inv, index) => {
+                    const { progress, liveProfit } = calculateLiveProfit(inv);
 
-                  return (
-                    <motion.tr
-                      key={inv.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                      className={`border-t ${
-                        isDark ? "border-gray-800" : "border-gray-200"
-                      } hover:bg-purple-900/10 transition`}
-                    >
-                      <td className="p-4 capitalize">{inv.plan}</td>
-                      <td className="p-4">${inv.amount}</td>
-                      <td className="p-4 text-teal-400 font-semibold">
-                        +${liveProfit.toFixed(2)}{" "}
-                        <span className="text-gray-400 text-xs ml-1">
-                          ({progress.toFixed(1)}% complete)
-                        </span>
-                      </td>
-
-                      <td className="p-4 text-gray-400">
-                        {new Date(inv.start_date).toLocaleDateString()}
-                      </td>
-                      <td className="p-4 text-gray-400">
-                        {new Date(inv.end_date).toLocaleDateString()}
-                      </td>
-                      <td className="p-4">
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            inv.status === "completed"
-                              ? "bg-teal-500/20 text-teal-400"
-                              : inv.status === "active"
-                              ? "bg-yellow-500/20 text-yellow-400"
-                              : "bg-gray-500/20 text-gray-400"
-                          }`}
-                        >
-                          {inv.status}
-                        </span>
-                      </td>
-                    </motion.tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    return (
+                      <motion.tr
+                        key={inv.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className={`border-t ${
+                          isDark ? "border-gray-800" : "border-gray-200"
+                        } hover:bg-purple-900/10 transition-colors`}
+                      >
+                        <td className="p-4 capitalize whitespace-nowrap">
+                          {inv.plan}
+                        </td>
+                        <td className="p-4 whitespace-nowrap">
+                          ${inv.amount.toFixed(2)}
+                        </td>
+                        <td className="p-4 text-teal-400 font-semibold whitespace-nowrap">
+                          +${liveProfit.toFixed(2)}{" "}
+                          <span className="text-gray-400 text-xs ml-1">
+                            ({progress.toFixed(1)}%)
+                          </span>
+                        </td>
+                        <td className="p-4 text-gray-400 whitespace-nowrap">
+                          {new Date(inv.start_date).toLocaleDateString()}
+                        </td>
+                        <td className="p-4 text-gray-400 whitespace-nowrap">
+                          {new Date(inv.end_date).toLocaleDateString()}
+                        </td>
+                        <td className="p-4 whitespace-nowrap">
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                              inv.status === "completed"
+                                ? "bg-teal-500/20 text-teal-400"
+                                : inv.status === "active"
+                                ? "bg-yellow-500/20 text-yellow-400"
+                                : "bg-gray-500/20 text-gray-400"
+                            }`}
+                          >
+                            {inv.status}
+                          </span>
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </motion.div>
       </main>
