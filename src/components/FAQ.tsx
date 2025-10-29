@@ -1,24 +1,51 @@
 "use client";
 
+import { useState } from "react";
 import { useTheme } from "../context/ThemeContext";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 const FAQ = () => {
   const { theme } = useTheme();
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   const faqs = [
     {
       q: "How do I start investing?",
-      a: "Create an account, deposit crypto, and choose a plan that suits your goals.",
+      a: "Create an account, deposit crypto, and choose a plan that suits your goals. Your investment begins immediately after confirmation.",
     },
     {
       q: "When do I receive my profits?",
-      a: "Profits are automatically credited to your balance based on your plan duration.",
+      a: "Profits are automatically added to your profit balance once your investment duration ends. You can then withdraw or reinvest them.",
     },
     {
       q: "Is BanInvest secure?",
-      a: "Absolutely. We use industry-grade encryption and multi-layer wallet protection.",
+      a: "Absolutely. We use end-to-end encryption, multi-layer wallet security, and KYC verification to protect all accounts.",
+    },
+    {
+      q: "What investment plans are available?",
+      a: "We currently offer Basic (40% ROI), Standard (75% ROI), and Premium (100% ROI) plans — each with different durations and returns.",
+    },
+    {
+      q: "Can I withdraw my funds anytime?",
+      a: "Withdrawals are allowed after your investment matures. For active investments, you must wait until the duration ends.",
+    },
+    {
+      q: "How long does withdrawal approval take?",
+      a: "Withdrawals are processed within minutes once approved by our system or admin team.",
+    },
+    {
+      q: "Do I need KYC verification?",
+      a: "Yes. All users must upload valid KYC documents to comply with security and anti-fraud policies before investing or withdrawing.",
+    },
+    {
+      q: "Can I reinvest my profit?",
+      a: "Yes, you can reinvest directly from your profit balance into any plan without needing to deposit again.",
     },
   ];
+
+  const toggleFAQ = (index: number) => {
+    setOpenIndex(openIndex === index ? null : index);
+  };
 
   return (
     <section
@@ -39,30 +66,51 @@ const FAQ = () => {
         Frequently Asked Questions
       </h3>
 
-      <div className="max-w-3xl mx-auto space-y-6">
+      <div className="max-w-3xl mx-auto space-y-4">
         {faqs.map((faq, i) => (
           <div
             key={i}
-            className={`p-6 rounded-xl border transition-all duration-300 hover:scale-[1.02] hover:shadow-lg ${
+            className={`rounded-xl border transition-all duration-300 overflow-hidden ${
               theme === "dark"
                 ? "bg-[#110024] border-purple-800 hover:border-teal-400/50"
                 : "bg-white border-gray-300 hover:border-teal-400/30"
             }`}
           >
-            <h4
-              className={`font-semibold mb-2 ${
-                theme === "dark" ? "text-teal-400" : "text-teal-600"
-              }`}
+            <button
+              onClick={() => toggleFAQ(i)}
+              className="w-full flex justify-between items-center p-5 text-left focus:outline-none"
             >
-              {faq.q}
-            </h4>
-            <p
-              className={`${
-                theme === "dark" ? "text-gray-400" : "text-gray-700"
-              }`}
-            >
-              {faq.a}
-            </p>
+              <h4
+                className={`font-semibold text-lg ${
+                  theme === "dark" ? "text-teal-400" : "text-teal-600"
+                }`}
+              >
+                {faq.q}
+              </h4>
+              {openIndex === i ? (
+                <ChevronUp
+                  className={`${
+                    theme === "dark" ? "text-teal-400" : "text-teal-600"
+                  }`}
+                />
+              ) : (
+                <ChevronDown
+                  className={`${
+                    theme === "dark" ? "text-teal-400" : "text-teal-600"
+                  }`}
+                />
+              )}
+            </button>
+
+            {openIndex === i && (
+              <div
+                className={`px-5 pb-5 text-sm leading-relaxed transition-all duration-500 ${
+                  theme === "dark" ? "text-gray-300" : "text-gray-700"
+                }`}
+              >
+                {faq.a}
+              </div>
+            )}
           </div>
         ))}
       </div>

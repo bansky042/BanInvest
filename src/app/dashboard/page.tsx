@@ -282,7 +282,7 @@ export default function DashboardPage() {
             >
               <h3 className="text-lg font-semibold">Recent Transactions</h3>
               <button
-                onClick={() => router.push("/transactions")}
+                onClick={() => router.push("/dashboard/transaction-history")}
                 className="text-sm text-teal-400 hover:underline"
               >
                 View All

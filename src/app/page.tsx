@@ -10,6 +10,7 @@ import FAQ from "@/components/FAQ";
 import CryptoMarketTable from "@/components/CryptoChart";
 import Loader from "@/components/Loader";
 import type { User } from "@supabase/supabase-js";
+import InvestmentCalculator from "@/components/InvestmentCalculator";
 
 export default function Home() {
   const [loading, setLoading] = useState(true);
@@ -49,6 +50,7 @@ export default function Home() {
       </section>
       <Features />
       <Plans user={user} />
+      <InvestmentCalculator />
       <Testimonials />
       <FAQ />
     </main>

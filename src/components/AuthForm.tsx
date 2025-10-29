@@ -357,6 +357,19 @@ export default function AuthForm({ type }: AuthFormProps) {
           Continue with Google
         </button>
 
+
+        {!isSignup && (
+  <div className="flex justify-center mt-4">
+    <span
+      onClick={() => router.push("/auth/forgot-password")}
+      className="text-sm cursor-pointer bg-gradient-to-r from-purple-500 to-teal-400 bg-clip-text text-transparent hover:opacity-80 transition"
+    >
+      Forgot Password?
+    </span>
+  </div>
+)}
+
+
         <p
           className={`text-center text-sm mt-6 ${
             theme === "dark" ? "text-gray-400" : "text-gray-600"
