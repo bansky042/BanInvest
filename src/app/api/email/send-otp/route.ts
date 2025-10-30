@@ -1,12 +1,11 @@
-// src/app/api/email/send-otp/route.ts
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 import { createClient } from "@supabase/supabase-js";
 
-// ✅ Secure Supabase Service Client
+// ✅ Secure Supabase Service Client (server-side only)
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // Must be set in Vercel/Env settings
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
 export async function POST(req: Request) {
@@ -17,7 +16,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
 
-    // ✅ Check user exists
+    // ✅ Check if user exists
     const { data: user, error: userError } = await supabase
       .from("users")
       .select("id")
@@ -29,32 +28,55 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Email not found" }, { status: 404 });
     }
 
-    // ✅ Generate OTP
+    const userId = user.id;
+
+    // ✅ Delete expired OTPs (older than 5 minutes)
+    await supabase
+      .from("user_otps")
+      .delete()
+      .lt("otp_created_at", new Date(Date.now() - 5 * 60 * 1000).toISOString());
+
+    // ✅ Check if user already has a valid OTP (within 5 minutes)
+    const { data: existingOtp } = await supabase
+      .from("user_otps")
+      .select("*")
+      .eq("user_id", userId)
+      .gt("otp_created_at", new Date(Date.now() - 5 * 60 * 1000).toISOString())
+      .maybeSingle();
+
+    if (existingOtp) {
+      return NextResponse.json(
+        { error: "You already have an active OTP. Please wait 5 minutes." },
+        { status: 400 }
+      );
+    }
+
+    // ✅ Generate a new OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // ✅ Store OTP in user_otps
-    const { error: otpError } = await supabase.from("user_otps").upsert([
+    // ✅ Insert OTP
+    const { error: insertError } = await supabase.from("user_otps").insert([
       {
-        user_id: user.id,
+        user_id: userId,
         otp,
         otp_created_at: new Date().toISOString(),
       },
     ]);
 
-    if (otpError) throw otpError;
+    if (insertError) throw insertError;
 
-    // ✅ Setup Nodemailer transporter
+    // ✅ Configure Nodemailer
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
-      secure: true, // true for 465
+      secure: true,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
     });
 
-    // ✅ Send email
+    // ✅ Send OTP email
     await transporter.sendMail({
       from: `"BanInvest Support" <${process.env.EMAIL_USER}>`,
       to: email,
@@ -65,6 +87,7 @@ export async function POST(req: Request) {
           <p>Your one-time password (OTP) is:</p>
           <h3 style="color:#4F46E5;">${otp}</h3>
           <p>This OTP will expire in <strong>5 minutes</strong>.</p>
+          <p>If you didn't request this, please ignore this email.</p>
         </div>
       `,
     });

@@ -1,7 +1,6 @@
-// src/app/auth/forgot-password/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTheme } from "@/context/ThemeContext";
 
 export default function ForgotPassword() {
@@ -13,55 +12,78 @@ export default function ForgotPassword() {
   const [message, setMessage] = useState("");
   const [resendDisabled, setResendDisabled] = useState(false);
 
+  // ⏱ OTP expiration timer state
+  const [timeLeft, setTimeLeft] = useState<number>(0);
+  const OTP_EXPIRATION = 300; // seconds (5 minutes)
+
+  // Timer countdown effect
+  useEffect(() => {
+    if (stage === "verify" && timeLeft > 0) {
+      const timer = setInterval(() => {
+        setTimeLeft((prev) => prev - 1);
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [stage, timeLeft]);
+
   // ✅ Send OTP
   const handleSendOtp = async (e?: React.FormEvent) => {
-  if (e) e.preventDefault();
-  if (loading) return;
+    if (e) e.preventDefault();
+    if (loading) return;
 
-  if (!email) {
-    setMessage("❗ Please enter your email address.");
-    return;
-  }
+    if (!email) {
+      setMessage("❗ Please enter your email address.");
+      return;
+    }
 
-  if (resendDisabled) {
-    setMessage("⏳ Please wait before requesting another OTP.");
-    return;
-  }
+    if (resendDisabled) {
+      setMessage("⏳ Please wait before requesting another OTP.");
+      return;
+    }
 
-  setLoading(true);
-  setMessage("");
+    setLoading(true);
+    setMessage("");
 
-  try {
-    const res = await fetch("/api/email/send-otp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
+    try {
+      const res = await fetch("/api/email/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
 
-    const result = await res.json();
+      const result = await res.json();
 
-    if (!res.ok) throw new Error(result.error || "Failed to send OTP");
+      if (!res.ok) throw new Error(result.error || "Failed to send OTP");
 
-    console.log("✅ OTP email sent:", result);
-    setMessage("✅ OTP sent successfully to your email!");
-    setStage("verify"); // move to verification screen
+      console.log("✅ OTP email sent:", result);
+      setMessage("✅ OTP sent successfully to your email!");
+      setStage("verify");
 
-    // Cooldown: prevent resending too soon
-    setResendDisabled(true);
-    setTimeout(() => setResendDisabled(false), 30000); // 30s cooldown
-  } catch (err: any) {
-    console.error("❌ OTP Send Error:", err);
-    setMessage(err.message || "Unexpected error occurred. Try again later.");
-  } finally {
-    setLoading(false);
-  }
-};
+      // Start expiration countdown
+      setTimeLeft(OTP_EXPIRATION);
 
+      // Cooldown to prevent spam
+      setResendDisabled(true);
+      setTimeout(() => setResendDisabled(false), 30000); // 30s cooldown
+    } catch (err: any) {
+      console.error("❌ OTP Send Error:", err);
+      setMessage(err.message || "Unexpected error occurred. Try again later.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // ✅ Verify OTP
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
+
+    // 🚫 Block verification if OTP expired
+    if (timeLeft <= 0) {
+      setMessage("❌ OTP expired. Please request a new one.");
+      return;
+    }
+
     setLoading(true);
     setMessage("");
 
@@ -87,6 +109,15 @@ export default function ForgotPassword() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 🧮 Helper: Format countdown
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60)
+      .toString()
+      .padStart(2, "0");
+    const s = (seconds % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
   };
 
   return (
@@ -127,6 +158,18 @@ export default function ForgotPassword() {
             }`}
           >
             {message}
+          </p>
+        )}
+
+        {stage === "verify" && timeLeft > 0 && (
+          <p className="text-center text-xs text-gray-400 mb-2">
+            ⏱ OTP expires in <span className="text-teal-400">{formatTime(timeLeft)}</span>
+          </p>
+        )}
+
+        {stage === "verify" && timeLeft <= 0 && (
+          <p className="text-center text-xs text-red-400 mb-2">
+            ❌ OTP expired. Please request a new one.
           </p>
         )}
 
